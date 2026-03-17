@@ -1,28 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <title>Meine Website</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
+            max-width: 1000px;
             margin: 50px auto;
             padding: 20px;
             background: #f0f0f0;
         }
-        h1 {
+        
+        /* Container für Bild und Text */
+        .container {
+            display: flex;
+            align-items: center;
+            gap: 40px;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        /* Linke Seite - Bild */
+        .bild {
+            flex: 1;
+        }
+        
+        .bild img {
+            width: 100%;
+            max-width: 300px;
+            border-radius: 50%; /* Macht das Bild rund */
+            border: 3px solid #333;
+        }
+        
+        /* Rechte Seite - Text */
+        .text {
+            flex: 2;
+        }
+        
+        .text h1 {
             color: #333;
+            margin-top: 0;
+        }
+        
+        .text p {
+            color: #666;
+            line-height: 1.6;
         }
     </style>
 </head>
 <body>
-    <h1>Willkommen auf meiner Website! 🚀</h1>
-    <p>Das ist meine eigene HTML-Seite auf GitHub Pages.</p>
-    
-    <h2>Meine Projekte:</h2>
-    <ul>
-        <li>OYNAME-3DEngine</li>
-        <li>OYNAME2-Engine</li>
-        <li>giDX2D</li>
-    </ul>
+    <div class="container">
+        <!-- Linke Seite mit Bild -->
+        <div class="bild">
+            <img src="https://via.placeholder.com/300" alt="Profilbild">
+            <!-- Tipp: Ersetze die URL mit deinem eigenen Bild! -->
+        </div>
+        
+        <!-- Rechte Seite mit Text -->
+        <div class="text">
+            <h1>Hallo, ich bin oyname! 👋</h1>
+            <p>
+                Ich entwickle leidenschaftlich gerne 3D-Engines und Spiele. 
+                Hier sind meine Projekte:
+            </p>
+            <ul>
+                <li><strong>OYNAME-3DEngine</strong> - Eine leistungsstarke 3D-Engine</li>
+                <li><strong>OYNAME2-Engine</strong> - Die nächste Generation</li>
+                <li><strong>giDX2D</strong> - 2D-Grafikbibliothek</li>
+            </ul>
+            <p>
+                🚀 Immer auf der Suche nach neuen Herausforderungen!
+            </p>
+        </div>
+    </div>
 </body>
 </html>
