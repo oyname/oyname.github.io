@@ -2,79 +2,247 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Meine Website</title>
+    <title>OYNAME Engine</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1000px;
-            margin: 50px auto;
-            padding: 20px;
-            background: #f0f0f0;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
         
-        /* Container für Bild und Text */
-        .container {
+        body {
+            font-family: 'Arial', sans-serif;
+        }
+        
+        /* Navigation - wie bei Unreal */
+        .navbar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            z-index: 100;
+            background: rgba(0,0,0,0.3);
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .search-icon {
+            color: white;
+            font-size: 20px;
+        }
+        
+        /* Hero Section mit wechselnden Bildern */
+        .hero {
+            height: 100vh;
+            width: 100%;
+            position: relative;
             display: flex;
             align-items: center;
-            gap: 40px;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            color: white;
+            overflow: hidden;
         }
         
-        /* Linke Seite - Bild */
-        .bild {
-            flex: 1;
-        }
-        
-        .bild img {
+        /* Hintergrundbilder Slider */
+        .slider {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            max-width: 300px;
-            border-radius: 50%; /* Macht das Bild rund */
-            border: 3px solid #333;
+            height: 100%;
         }
         
-        /* Rechte Seite - Text */
-        .text {
-            flex: 2;
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
         }
         
-        .text h1 {
-            color: #333;
-            margin-top: 0;
+        .slide.active {
+            opacity: 1;
         }
         
-        .text p {
-            color: #666;
+        /* Dunkle Overlay für bessere Lesbarkeit */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+        
+        /* Content links - wie bei Unreal */
+        .content {
+            position: relative;
+            z-index: 10;
+            max-width: 600px;
+            padding-left: 50px;
+        }
+        
+        .engine-name {
+            font-size: 60px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            line-height: 1.1;
+        }
+        
+        .engine-name span {
+            display: block;
+            font-size: 50px;
+            font-weight: normal;
+        }
+        
+        .description {
+            font-size: 18px;
+            margin-bottom: 30px;
             line-height: 1.6;
+            opacity: 0.9;
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .btn {
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        
+        .btn-primary {
+            background: #0078f2;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        /* Game Info am unteren Rand */
+        .game-info {
+            position: absolute;
+            bottom: 30px;
+            left: 50px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            color: white;
+        }
+        
+        .game-logo {
+            width: 50px;
+            height: 50px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .game-name {
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Linke Seite mit Bild -->
-        <div class="bild">
-            <img src="https://via.placeholder.com/300" alt="Profilbild">
-            <!-- Tipp: Ersetze die URL mit deinem eigenen Bild! -->
+    <!-- Navigation wie bei Unreal -->
+    <nav class="navbar">
+        <div class="logo">OYNAME ENGINE</div>
+        <div class="nav-links">
+            <a href="#">Overview</a>
+            <a href="#">Uses</a>
+            <a href="#">News</a>
+            <a href="#">Documentation</a>
+            <a href="#">Learning</a>
+            <a href="#">Connect</a>
+            <a href="#">Fab</a>
+        </div>
+        <div class="search-icon">🔍</div>
+    </nav>
+
+    <!-- Hero Section mit wechselnden Bildern -->
+    <div class="hero">
+        <!-- Slider Container -->
+        <div class="slider">
+            <div class="slide active" style="background-image: url('https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=2070')"></div>
+            <div class="slide" style="background-image: url('https://images.unsplash.com/photo-1555685812-4b743f0fad7d?q=80&w=2070')"></div>
+            <div class="slide" style="background-image: url('https://images.unsplash.com/photo-1553481187-be93c21490a9?q=80&w=2070')"></div>
+            <div class="slide" style="background-image: url('https://images.unsplash.com/photo-1552820728-8b83bb6b773f?q=80&w=2070')"></div>
         </div>
         
-        <!-- Rechte Seite mit Text -->
-        <div class="text">
-            <h1>Hallo, ich bin oyname! 👋</h1>
-            <p>
-                Ich entwickle leidenschaftlich gerne 3D-Engines und Spiele. 
-                Hier sind meine Projekte:
-            </p>
-            <ul>
-                <li><strong>OYNAME-3DEngine</strong> - Eine leistungsstarke 3D-Engine</li>
-                <li><strong>OYNAME2-Engine</strong> - Die nächste Generation</li>
-                <li><strong>giDX2D</strong> - 2D-Grafikbibliothek</li>
-            </ul>
-            <p>
-                🚀 Immer auf der Suche nach neuen Herausforderungen!
-            </p>
+        <!-- Dunkle Overlay -->
+        <div class="overlay"></div>
+        
+        <!-- Content links -->
+        <div class="content">
+            <div class="engine-name">
+                OYNAME ENGINE
+                <span>We make the engine.<br>You make it Unreal.</span>
+            </div>
+            <div class="description">
+                Built by developers, for developers, with fair terms for all. 
+                Because everyone with an idea deserves to use the world's most open, 
+                advanced real-time creation tool.
+            </div>
+            <div class="buttons">
+                <button class="btn btn-primary">Get OYNAME Engine</button>
+                <button class="btn btn-secondary">Learn about licensing</button>
+            </div>
+        </div>
+        
+        <!-- Game Info am unteren Rand -->
+        <div class="game-info">
+            <div class="game-logo">🎮</div>
+            <div class="game-name">OYNAME-3DEngine · Your Games Here</div>
         </div>
     </div>
+
+    <!-- JavaScript für den automatischen Bildwechsel -->
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const slideCount = slides.length;
+
+        function nextSlide() {
+            slides[currentSlide].classList.remove('active');
+            currentSlide = (currentSlide + 1) % slideCount;
+            slides[currentSlide].classList.add('active');
+        }
+
+        // Bild alle 5 Sekunden wechseln
+        setInterval(nextSlide, 5000);
+    </script>
 </body>
 </html>
