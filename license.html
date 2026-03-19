@@ -5,7 +5,6 @@
     <title>OYNAME Engine - Licensing</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        /* === SAME CSS AS ON YOUR MAIN PAGE === */
         * {
             margin: 0;
             padding: 0;
@@ -17,7 +16,6 @@
             overflow-x: hidden;
         }
         
-        /* Navigation with hover effects */
         .navbar {
             position: absolute;
             top: 0;
@@ -87,19 +85,6 @@
             width: 100%;
         }
         
-        .search-icon {
-            color: white;
-            font-size: 20px;
-            cursor: pointer;
-            transition: transform 0.3s;
-        }
-        
-        .search-icon:hover {
-            transform: scale(1.2);
-            color: #0078f2;
-        }
-        
-        /* Hero Section - adjusted for licensing page */
         .hero {
             min-height: 100vh;
             width: 100%;
@@ -110,7 +95,6 @@
             overflow: hidden;
         }
         
-        /* Background image slider with parallax effect */
         .slider {
             position: absolute;
             top: 0;
@@ -142,7 +126,6 @@
             to { transform: scale(1.1); }
         }
         
-        /* Enhanced overlay with gradient */
         .overlay {
             position: absolute;
             top: 0;
@@ -153,13 +136,11 @@
             z-index: 1;
         }
         
-        /* Content with animation */
         .content {
             position: relative;
             z-index: 10;
             max-width: 900px;
             padding: 100px 50px;
-            transform: translateY(0);
             animation: slideUp 1s ease-out;
             background: rgba(0,0,0,0.5);
             backdrop-filter: blur(10px);
@@ -189,13 +170,13 @@
         
         .engine-name span {
             display: block;
-            font-size: 25px;
+            font-size: 22px;
             font-weight: 300;
             opacity: 0.9;
             text-shadow: 0 0 10px rgba(255,255,255,0.3);
+            margin-top: 10px;
         }
         
-        /* License-specific styles */
         .license-section {
             margin-top: 30px;
         }
@@ -206,36 +187,29 @@
             padding: 25px;
             margin-bottom: 25px;
             border-left: 4px solid #0078f2;
-            transition: transform 0.3s;
+            transition: background 0.3s;
         }
         
         .license-card:hover {
-            transform: translateX(10px);
-            background: rgba(255,255,255,0.15);
-        }
-        
-        .license-icon {
-            font-size: 24px;
-            margin-right: 15px;
-            display: inline-block;
-            vertical-align: middle;
+            background: rgba(255,255,255,0.12);
         }
         
         .license-title {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: bold;
             margin-bottom: 15px;
             display: flex;
             align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
         }
         
         .license-badge {
             display: inline-block;
             padding: 5px 15px;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
-            margin-left: 15px;
         }
         
         .badge-code {
@@ -243,36 +217,16 @@
             color: white;
         }
         
-        .badge-assets {
-            background: #f20045;
+        .badge-note {
+            background: rgba(255,255,255,0.15);
             color: white;
+            border: 1px solid rgba(255,255,255,0.15);
         }
         
         .license-text {
             line-height: 1.8;
             color: rgba(255,255,255,0.9);
-        }
-        
-        .license-list {
-            list-style: none;
-            margin-top: 15px;
-        }
-        
-        .license-list li {
-            margin-bottom: 10px;
-            padding-left: 25px;
-            position: relative;
-        }
-        
-        .license-list li::before {
-            content: "✅";
-            position: absolute;
-            left: 0;
-            color: #00ff88;
-        }
-        
-        .license-list li.warning::before {
-            content: "⚠️";
+            font-size: 16px;
         }
         
         .back-button {
@@ -392,11 +346,6 @@
                 align-items: flex-start;
             }
             
-            .license-badge {
-                margin-left: 0;
-                margin-top: 10px;
-            }
-            
             .game-info {
                 left: 20px;
                 bottom: 20px;
@@ -461,91 +410,49 @@
         <div class="content">
             <div class="engine-name">
                 LEARN ABOUT LICENSING
-                <span>Clear terms for using the OYNAME Engine</span>
+                <span>Licensing terms for the OYNAME Engine</span>
             </div>
             
             <div class="license-section">
-                <!-- Code License -->
                 <div class="license-card">
                     <div class="license-title">
-                        <span class="license-icon">👨‍💻</span>
-                        Source Code
+                        <span>Source Code</span>
                         <span class="license-badge badge-code">MPL-2.0</span>
                     </div>
                     <div class="license-text">
-                        The <strong>OYNAME Engine</strong> is released under the 
-                        <strong>Mozilla Public License Version 2.0</strong>.
-
-                        <ul class="license-list">
-                            <li>Free to use in private and commercial projects</li>
-                            <li>Free to study, modify, and improve</li>
-                            <li>Can be used in your own projects, including closed-source ones</li>
-                            <li class="warning">If you modify MPL-licensed engine files and distribute them, those modified files must remain under MPL 2.0</li>
-                            <li>Your own separate code does not automatically have to be published under MPL 2.0</li>
-                        </ul>
-                        
-                        <p style="margin-top: 15px; padding: 10px; background: rgba(0,120,242,0.2); border-radius: 8px;">
-                            <strong>In short:</strong> You can use the engine in your own work, including commercial projects. 
-                            The MPL 2.0 applies to the engine files released under that license, not automatically to the rest of your project.
-                        </p>
+                        The <strong>OYNAME Engine</strong> is released under the <strong>Mozilla Public License 2.0</strong>.
+                        You may use, study, modify, and distribute the engine, including in commercial projects.
+                        <br><br>
+                        The license applies to the engine files published under MPL 2.0 and does not automatically apply
+                        to the rest of a project that uses the engine.
+                        <br><br>
+                        If you modify MPL-licensed engine files and distribute those modified files, those modified files
+                        must remain available under the <strong>MPL 2.0</strong>. Separate code created independently from
+                        those files does not automatically have to be released under the same license.
                     </div>
                 </div>
-                
-                <!-- Attribution / Notice -->
+
                 <div class="license-card">
                     <div class="license-title">
-                        <span class="license-icon">📌</span>
-                        Attribution
-                        <span class="license-badge badge-code">OPTIONAL</span>
+                        <span>Attribution</span>
+                        <span class="license-badge badge-note">Optional</span>
                     </div>
                     <div class="license-text">
-                        Mentioning the <strong>OYNAME Engine</strong> in your project is 
-                        <strong>not required</strong>.
-
-                        <ul class="license-list">
-                            <li>You are not obligated to credit the engine</li>
-                            <li>A voluntary mention in the credits, documentation, or project page is appreciated</li>
-                        </ul>
-                        
-                        <p style="margin-top: 15px; padding: 10px; background: rgba(0,120,242,0.2); border-radius: 8px;">
-                            <strong>In short:</strong> Attribution is welcome, but it is not a license requirement.
-                        </p>
+                        Referencing the <strong>OYNAME Engine</strong> in your project is not required.
+                        A voluntary mention in the credits, documentation, or project page is appreciated,
+                        but it is not a condition of the license.
                     </div>
                 </div>
-                
-                <!-- Warranty / Liability -->
+
                 <div class="license-card">
                     <div class="license-title">
-                        <span class="license-icon">⚖️</span>
-                        Warranty and Liability
-                        <span class="license-badge badge-assets">AS IS</span>
+                        <span>Warranty and Liability</span>
                     </div>
                     <div class="license-text">
-                        The engine is provided <strong>"as is"</strong> under the terms of the 
-                        <strong>MPL 2.0</strong>.
-
-                        <ul class="license-list">
-                            <li class="warning">No warranty is provided</li>
-                            <li class="warning">No liability is assumed to the extent permitted by applicable law</li>
-                            <li>The full license text remains the authoritative source</li>
-                        </ul>
-                        
-                        <p style="margin-top: 15px; padding: 10px; background: rgba(242,0,69,0.2); border-radius: 8px;">
-                            <strong>In short:</strong> The engine is distributed without warranty and without liability to the extent permitted by law.
-                        </p>
+                        The engine is provided <strong>&quot;as is&quot;</strong>, without warranty and without liability
+                        to the extent permitted by applicable law. The full terms of the
+                        <strong>MPL 2.0</strong> remain authoritative.
                     </div>
-                </div>
-                
-                <!-- Summary -->
-                <div style="background: rgba(255,255,255,0.05); border-radius: 15px; padding: 20px; margin-top: 30px; text-align: center;">
-                    <p style="font-size: 18px; margin-bottom: 15px;">
-                        <strong>Summary</strong>
-                    </p>
-                    <p>
-                        Use the engine freely, including in commercial projects.<br>
-                        Keep modifications to MPL-licensed engine files under MPL 2.0 when distributing them.<br>
-                        Attribution is appreciated, but optional.
-                    </p>
                 </div>
             </div>
             
@@ -557,7 +464,6 @@
             <div class="game-name">OYNAME Studio · Our Games Here</div>
         </a>
 
-        <!-- Slide indicators -->
         <div class="slide-indicators">
             <div class="indicator active"></div>
             <div class="indicator"></div>
