@@ -2,279 +2,9 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>OYNAME Engine - Architektur</title>
+    <title>OYNAME Engine - Architecture</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: Arial, sans-serif;
-            background: #0a0a0a;
-            color: white;
-            overflow-x: hidden;
-        }
-
-        .navbar {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px 50px;
-            z-index: 200;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
-        }
-
-        .logo img {
-            width: 275px;
-            height: 40px;
-            display: block;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 30px;
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        .nav-links a {
-            color: white;
-            text-decoration: none;
-            font-size: 14px;
-            transition: color 0.3s;
-        }
-
-        .nav-links a:hover {
-            color: #0078f2;
-        }
-
-        .navbar-placeholder {
-            width: 275px;
-            visibility: hidden;
-        }
-
-        .page {
-            position: relative;
-            min-height: 100vh;
-            width: 100%;
-            overflow: hidden;
-        }
-
-        .slider {
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-        }
-
-        .slide {
-            position: absolute;
-            inset: 0;
-            background-size: cover;
-            background-position: center;
-            opacity: 0;
-            transition: opacity 1.5s ease-in-out;
-            transform: scale(1.05);
-            animation: slowZoom 20s infinite alternate;
-        }
-
-        .slide.active {
-            opacity: 1;
-        }
-
-        @keyframes slowZoom {
-            from { transform: scale(1); }
-            to { transform: scale(1.1); }
-        }
-
-        .overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 1;
-            background:
-                linear-gradient(135deg, rgba(0,0,0,0.82) 0%, rgba(0,120,242,0.16) 100%);
-        }
-
-        .main-container {
-            position: relative;
-            z-index: 2;
-            margin-top: 100px;
-            padding: 40px 20px 80px;
-            min-height: 100vh;
-        }
-
-        .architecture-content {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 40px;
-            background: rgba(12, 12, 18, 0.78);
-            border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.10);
-            backdrop-filter: blur(8px);
-            line-height: 1.7;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-        }
-
-        .architecture-content h1 {
-            color: #0078f2;
-            font-size: 2.4em;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #0078f2;
-            padding-bottom: 10px;
-        }
-
-        .architecture-content h2 {
-            color: #00a8f2;
-            margin: 38px 0 18px;
-            font-size: 1.8em;
-        }
-
-        .architecture-content h3 {
-            color: #4db8ff;
-            margin: 28px 0 12px;
-            font-size: 1.3em;
-        }
-
-        .architecture-content p {
-            margin-bottom: 18px;
-            color: #e0e0e0;
-        }
-
-        .architecture-content code {
-            background: #1e1e2e;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: "Courier New", monospace;
-            color: #ffa657;
-        }
-
-        .architecture-content pre {
-            background: #151520;
-            padding: 20px;
-            border-radius: 8px;
-            overflow-x: auto;
-            border-left: 4px solid #0078f2;
-            margin: 24px 0;
-        }
-
-        .architecture-content pre code {
-            background: none;
-            color: #e0e0e0;
-            padding: 0;
-        }
-
-        .architecture-content ul,
-        .architecture-content ol {
-            margin: 18px 0 18px 28px;
-        }
-
-        .architecture-content li {
-            margin-bottom: 8px;
-            color: #e0e0e0;
-        }
-
-        .architecture-content a {
-            color: #4db8ff;
-            text-decoration: none;
-        }
-
-        .architecture-content a:hover {
-            text-decoration: underline;
-        }
-
-        .architecture-content blockquote {
-            border-left: 4px solid #0078f2;
-            background: rgba(0,120,242,0.10);
-            padding: 18px 22px;
-            margin: 24px 0;
-            border-radius: 0 8px 8px 0;
-            color: #c7d8e8;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 60px;
-            color: #b0b0b0;
-            font-size: 18px;
-        }
-
-        .error {
-            text-align: center;
-            padding: 60px;
-            color: #ff8080;
-            border: 1px solid #ff8080;
-            border-radius: 8px;
-            background: rgba(255, 0, 0, 0.08);
-        }
-
-        .slide-indicators {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            z-index: 3;
-            display: flex;
-            gap: 10px;
-        }
-
-        .indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.35);
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .indicator.active {
-            background: white;
-            transform: scale(1.2);
-            box-shadow: 0 0 18px rgba(255,255,255,0.9);
-        }
-
-        .indicator:hover {
-            background: #0078f2;
-        }
-
-        @media (max-width: 768px) {
-            .navbar {
-                padding: 20px;
-            }
-
-            .nav-links {
-                display: none;
-            }
-
-            .logo img {
-                width: 200px;
-                height: 30px;
-            }
-
-            .main-container {
-                margin-top: 80px;
-                padding: 20px 12px 70px;
-            }
-
-            .architecture-content {
-                padding: 24px;
-            }
-
-            .architecture-content h1 {
-                font-size: 1.8em;
-            }
-
-            .architecture-content h2 {
-                font-size: 1.4em;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="styles/site.css">
 </head>
 <body>
     <div class="page">
@@ -289,22 +19,20 @@
 
         <nav class="navbar">
             <div class="logo">
-                <img src="oynameengine_logo.png" width="275" height="40" alt="OYNAME Engine">
+                <img src="oynameengine_logo.png" alt="OYNAME Engine">
             </div>
 
             <div class="nav-links">
                 <a href="index.html">Home</a>
                 <a href="architecture.html">Architecture</a>
-                <a href="#">API Reference</a>
-                <a href="#">Documentation</a>
-                <a href="#">Learning</a>
+                <a href="license.html">Licensing</a>
             </div>
 
             <div class="navbar-placeholder"></div>
         </nav>
 
         <div class="main-container">
-            <div class="architecture-content" id="markdown-container">
+            <div class="content-panel" id="markdown-container">
                 <div class="loading">📄 Lade Architektur-Dokument...</div>
             </div>
         </div>
@@ -318,63 +46,10 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
-
+    <script src="scripts/site.js"></script>
     <script>
-        fetch('ARCHITECTURE.md')
-            .then(response => {
-                if (!response.ok) throw new Error('Datei nicht gefunden');
-                return response.text();
-            })
-            .then(markdown => {
-                const converter = new showdown.Converter({
-                    tables: true,
-                    ghCompatibleHeaderId: true,
-                    simplifiedAutoLink: true,
-                    strikethrough: true
-                });
-
-                const html = converter.makeHtml(markdown);
-                document.getElementById('markdown-container').innerHTML = html;
-            })
-            .catch(error => {
-                document.getElementById('markdown-container').innerHTML =
-                    '<div class="error">❌ Fehler beim Laden: ' + error.message + '</div>';
-            });
-
-        let currentSlide = 0;
-        const slides = document.querySelectorAll('.slide');
-        const indicators = document.querySelectorAll('.indicator');
-        const slideCount = slides.length;
-        let slideInterval;
-
-        function showSlide(index) {
-            slides[currentSlide].classList.remove('active');
-            indicators[currentSlide].classList.remove('active');
-
-            currentSlide = index;
-
-            slides[currentSlide].classList.add('active');
-            indicators[currentSlide].classList.add('active');
-        }
-
-        function nextSlide() {
-            const nextIndex = (currentSlide + 1) % slideCount;
-            showSlide(nextIndex);
-        }
-
-        indicators.forEach((indicator, index) => {
-            indicator.addEventListener('click', () => {
-                showSlide(index);
-                resetInterval();
-            });
-        });
-
-        function resetInterval() {
-            clearInterval(slideInterval);
-            slideInterval = setInterval(nextSlide, 5000);
-        }
-
-        resetInterval();
+        initSlider();
+        loadMarkdown('markdown-container', 'ARCHITECTURE.md');
     </script>
 </body>
 </html>
