@@ -37,24 +37,97 @@ function initSlider() {
     resetInterval();
 }
 
-function loadMarkdown(targetId, markdownFile) {
-    fetch(markdownFile)
-        .then(response => {
-            if (!response.ok) throw new Error('Datei nicht gefunden');
-            return response.text();
-        })
-        .then(markdown => {
-            const converter = new showdown.Converter({
-                tables: true,
-                ghCompatibleHeaderId: true,
-                simplifiedAutoLink: true,
-                strikethrough: true
-            });
+function parseFrontmatter(text) {
+    const frontmatterRegex = /^---\s*([\s\S]*?)\s*---\s*([\s\S]*)$/;
+    const match = text.match(frontmatterRegex);
 
-            document.getElementById(targetId).innerHTML = converter.makeHtml(markdown);
-        })
-        .catch(error => {
-            document.getElementById(targetId).innerHTML =
-                '<div class="error">❌ Fehler beim Laden: ' + error.message + '</div>';
+    if (!match) {
+        return {
+            meta: {},
+            content: text
+        };
+    }
+
+    const rawMeta = match[1];
+    const content = match[2];
+    const meta = {};
+
+    rawMeta.split('\n').forEach(line => {
+        const separatorIndex = line.indexOf(':');
+        if (separatorIndex === -1) return;
+
+        const key = line.slice(0, separatorIndex).trim();
+        const value = line.slice(separatorIndex + 1).trim();
+        meta[key] = value;
+    });
+
+    return { meta, content };
+}
+
+function createExampleHtml(meta, htmlContent) {
+    return `
+        <section class="example-item">
+            <div class="example-image">
+                <img src="${meta.image || ''}" alt="${meta.title || 'Beispielbild'}">
+            </div>
+
+            <div class="example-text">
+                <h2>${meta.title || 'Ohne Titel'}</h2>
+                <div class="example-description">
+                    ${htmlContent}
+                </div>
+                ${
+                    meta.download
+                        ? `<a class="download-button" href="${meta.download}" download>
+                            ${meta.downloadLabel || 'Datei herunterladen'}
+                           </a>`
+                        : ''
+                }
+            </div>
+        </section>
+    `;
+}
+
+async function loadAllExamples() {
+    const container = document.getElementById('examples-container');
+
+    try {
+        const listResponse = await fetch('data/examples.json');
+        if (!listResponse.ok) {
+            throw new Error('examples.json konnte nicht geladen werden');
+        }
+
+        const examples = await listResponse.json();
+
+        if (!Array.isArray(examples) || examples.length === 0) {
+            container.innerHTML = '<div class="error">❌ Keine Beispiele gefunden.</div>';
+            return;
+        }
+
+        const converter = new showdown.Converter({
+            tables: true,
+            ghCompatibleHeaderId: true,
+            simplifiedAutoLink: true,
+            strikethrough: true
         });
+
+        const renderedExamples = await Promise.all(
+            examples.map(async item => {
+                const response = await fetch(item.file);
+                if (!response.ok) {
+                    throw new Error(`Datei nicht gefunden: ${item.file}`);
+                }
+
+                const text = await response.text();
+                const { meta, content } = parseFrontmatter(text);
+                const htmlContent = converter.makeHtml(content);
+
+                return createExampleHtml(meta, htmlContent);
+            })
+        );
+
+        container.innerHTML = renderedExamples.join('');
+    } catch (error) {
+        container.innerHTML = `<div class="error">❌ Fehler beim Laden: ${error.message}</div>`;
+    }
 }
