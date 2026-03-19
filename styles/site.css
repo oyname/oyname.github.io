@@ -230,6 +230,11 @@ body {
     border-radius: 12px;
 }
 
+.example-image {
+    flex: 0 0 480;
+    max-width: 480%;
+}
+
 .example-image img {
     width: 100%;
     height: auto;
