@@ -16,20 +16,38 @@
             overflow-x: hidden;
         }
         
-        /* Navigation - Logo links, Links zentriert in der Mitte */
-        .navbar {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px 50px;
-            z-index: 150;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
-            transition: background 0.3s;
-        }
+    .navbar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 50px;
+        z-index: 150;
+        background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+        transition: background 0.3s;
+    }
+    
+    .logo {
+        display: flex;
+        align-items: center;
+        width: 275px;
+    }
+    
+    .nav-links {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 30px;
+    }
+
+.navbar-placeholder {
+    width: 275px;
+    visibility: hidden;
+}
         
         .navbar:hover {
             background: rgba(0,0,0,0.8);
@@ -380,6 +398,7 @@
                  onerror="this.classList.add('error'); this.nextElementSibling.style.display = 'block';">
             <div class="logo-fallback">OYNAME</div>
         </div>
+    
         <div class="nav-links">
             <a href="https://oyname.github.io/index.html">Home</a>
             <a href="https://oyname.github.io/architecture.html">Architecture</a>
@@ -387,7 +406,8 @@
             <a href="#">Documentation</a>
             <a href="#">Learning</a>
         </div>
-        <dic> </dic>
+    
+        <div class="navbar-placeholder"></div>
     </nav>
 
     <div class="hero">
