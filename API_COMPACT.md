@@ -1,7 +1,5 @@
 # GIDX ENGINE API OVERVIEW
 
----
-
 ## 1. Startup Path
 
 Typical direct usage path:
