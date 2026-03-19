@@ -1,4 +1,4 @@
-# Engine Architecture
+# ENGINE ARCHITECTURE
 
 ## Overview
 
