@@ -56,25 +56,18 @@
             gap: 30px;
         }
         
+        .nav-links {
+            display: flex;
+            gap: 30px;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);  /* Zentriert die Links */
+        }
+        
         .nav-links a {
             color: white;
             text-decoration: none;
             font-size: 14px;
-            font-weight: 500;
-            padding: 5px 0;
-            position: relative;
-            transition: color 0.3s;
-        }
-        
-        .nav-links a::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 0;
-            height: 2px;
-            background: #0078f2;
-            transition: width 0.3s;
         }
         
         .nav-links a:hover {
