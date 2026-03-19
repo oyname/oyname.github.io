@@ -64,68 +64,38 @@ function parseFrontmatter(text) {
     return { meta, content };
 }
 
-function createExampleHtml(meta, htmlContent) {
-    return `
-        <section class="example-item">
-            <div class="example-image">
-                <img src="${meta.image || ''}" alt="${meta.title || 'Beispielbild'}">
-            </div>
-            <div class="example-text">
-                <h2>${meta.title || 'Ohne Titel'}</h2>
-                <div class="example-description">
-                    ${htmlContent}
-                </div>
-                ${meta.download ? `
-                    <a class="download-button" href="${meta.download}" download>
-                        ${meta.downloadLabel || 'Datei herunterladen'}
-                    </a>
-                ` : ''}
-            </div>
-        </section>
-    `;
+function getExampleFileFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('file') || 'examples/example1.md';
 }
 
-async function loadAllExamples() {
-    const container = document.getElementById('examples-container');
+function loadExampleFromMarkdown() {
+    const markdownFile = getExampleFileFromQuery();
 
-    try {
-        const listResponse = await fetch('data/examples.json');
-        if (!listResponse.ok) {
-            throw new Error('examples.json konnte nicht geladen werden');
-        }
+    fetch(markdownFile)
+        .then(response => {
+            if (!response.ok) throw new Error('Datei nicht gefunden');
+            return response.text();
+        })
+        .then(text => {
+            const { meta, content } = parseFrontmatter(text);
 
-        const examples = await listResponse.json();
+            const converter = new showdown.Converter({
+                tables: true,
+                ghCompatibleHeaderId: true,
+                simplifiedAutoLink: true,
+                strikethrough: true
+            });
 
-        if (!Array.isArray(examples) || examples.length === 0) {
-            container.innerHTML = '<div class="error">❌ Keine Beispiele gefunden.</div>';
-            return;
-        }
-
-        const converter = new showdown.Converter({
-            tables: true,
-            ghCompatibleHeaderId: true,
-            simplifiedAutoLink: true,
-            strikethrough: true
+            document.getElementById('example-title').textContent = meta.title || 'Ohne Titel';
+            document.getElementById('example-image').src = meta.image || '';
+            document.getElementById('example-image').alt = meta.title || 'Beispielbild';
+            document.getElementById('example-download').href = meta.download || '#';
+            document.getElementById('example-download').textContent = meta.downloadLabel || 'Datei herunterladen';
+            document.getElementById('example-description').innerHTML = converter.makeHtml(content);
+        })
+        .catch(error => {
+            document.getElementById('example-description').innerHTML =
+                '<div class="error">❌ Fehler beim Laden: ' + error.message + '</div>';
         });
-
-        const renderedExamples = await Promise.all(
-            examples.map(async (item) => {
-                const response = await fetch(item.file);
-                if (!response.ok) {
-                    throw new Error(`Datei nicht gefunden: ${item.file}`);
-                }
-
-                const text = await response.text();
-                const { meta, content } = parseFrontmatter(text);
-                const htmlContent = converter.makeHtml(content);
-
-                return createExampleHtml(meta, htmlContent);
-            })
-        );
-
-        container.innerHTML = renderedExamples.join('');
-    } catch (error) {
-        container.innerHTML = `<div class="error">❌ Fehler beim Laden: ${error.message}</div>`;
-        console.error(error);
-    }
 }
