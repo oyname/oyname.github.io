@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>OYNAME Engine - Architektur</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* DEIN DESIGN - 1:1 von dir übernommen */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #0a0a0a;
+            color: white;
+        }
+        
+        /* Navigation - wie bei Unreal */
+        .navbar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            z-index: 150;
+            background: rgba(0,0,0,0.3);
+        }
+        
+        .logo img {
+            width: 275px;
+            height: 40px;
+            display: block;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        /* Hero Section mit wechselnden Bildern */
+        .hero {
+            height: 100vh;
+            width: 100%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            color: white;
+            overflow: hidden;
+        }
+        
+        .slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+        }
+        
+        .slide.active {
+            opacity: 1;
+        }
+        
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+        
+        .content {
+            position: relative;
+            z-index: 10;
+            max-width: 600px;
+            padding-left: 50px;
+        }
+        
+        .engine-name {
+            font-size: 60px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            line-height: 1.1;
+        }
+        
+        .engine-name span {
+            display: block;
+            font-size: 35px;
+            font-weight: normal;
+        }
+        
+        .description {
+            font-size: 18px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .btn {
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        
+        .btn-primary {
+            background: #0078f2;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .game-info {
+            position: absolute;
+            bottom: 30px;
+            left: 50px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            color: white;
+            text-decoration: none;
+        }
+        
+        .game-logo {
+            width: 50px;
+            height: 50px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* NEU: Container für die Architektur */
+        .architecture-content {
+            max-width: 1000px;
+            margin: 120px auto 50px;
+            padding: 40px;
+            background: rgba(0,0,0,0.7);
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            line-height: 1.6;
+        }
+
+        /* Markdown-Styling */
+        .architecture-content h1 { color: #0078f2; font-size: 2.5em; margin-bottom: 20px; }
+        .architecture-content h2 { color: #00a8f2; margin: 30px 0 15px; }
+        .architecture-content h3 { color: #4db8ff; margin: 25px 0 10px; }
+        .architecture-content p { margin-bottom: 15px; }
+        .architecture-content code { background: #1e1e2e; padding: 2px 6px; border-radius: 4px; }
+        .architecture-content pre { background: #1a1a24; padding: 15px; border-radius: 8px; overflow-x: auto; border-left: 3px solid #0078f2; }
+        .architecture-content ul, .architecture-content ol { margin: 15px 0 15px 30px; }
+        .architecture-content a { color: #0078f2; text-decoration: none; }
+        .architecture-content a:hover { text-decoration: underline; }
+        .architecture-content blockquote { border-left: 3px solid #0078f2; padding-left: 20px; margin: 20px 0; opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">
+            <img src="oynameengine_logo.png" width="275" height="40" alt="OYNAME Engine">
+        </div>
+        <div class="nav-links">
+            <a href="index.html">Home</a>
+            <a href="architektur.html">Architecture</a>
+            <a href="#">API Reference</a>
+            <a href="#">Documentation</a>
+            <a href="#">Learning</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section mit einem Bild (einfach gehalten) -->
+    <div class="hero">
+        <div class="slider">
+            <div class="slide active" style="background-image: url('oyname_image1.png')"></div>
+        </div>
+        <div class="overlay"></div>
+        <div class="content">
+            <div class="engine-name">
+                OYNAME ENGINE
+                <span>Architecture & Design</span>
+            </div>
+            <div class="description">
+                Die technische Dokumentation und Architekturübersicht der OYNAME Engine.
+            </div>
+        </div>
+    </div>
+
+    <!-- HIER KOMMT DIE MD DATEI REIN -->
+    <div class="architecture-content" id="markdown-container">
+        <div style="text-align: center; padding: 40px;">Lade Architektur-Dokument...</div>
+    </div>
+
+    <!-- Showdown für Markdown -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+    
+    <script>
+        // Deine ARCHITECTURE.md von GitHub laden und anzeigen
+        fetch('https://raw.githubusercontent.com/oyname/oyname.github.io/main/ARCHITECTURE.md')
+            .then(response => {
+                if (!response.ok) throw new Error('Datei nicht gefunden');
+                return response.text();
+            })
+            .then(markdown => {
+                const converter = new showdown.Converter({
+                    tables: true,
+                    ghCompatibleHeaderId: true
+                });
+                const html = converter.makeHtml(markdown);
+                document.getElementById('markdown-container').innerHTML = html;
+            })
+            .catch(error => {
+                document.getElementById('markdown-container').innerHTML = 
+                    '<div style="color: #ff4444; padding: 20px;">Fehler beim Laden: ' + error.message + '</div>';
+            });
+    </script>
+</body>
+</html>
