@@ -78,6 +78,7 @@ function loadMarkdown(targetId, markdownFile) {
         });
 }
 
+/* HIER UNTEN EINFÜGEN */
 function parseFrontmatter(text) {
     const frontmatterRegex = /^---\s*([\s\S]*?)\s*---\s*([\s\S]*)$/;
     const match = text.match(frontmatterRegex);
@@ -131,6 +132,8 @@ function createExampleHtml(meta, htmlContent) {
 async function loadAllExamples() {
     const container = document.getElementById('examples-container');
 
+    if (!container) return;
+
     try {
         const listResponse = await fetch('data/examples.json');
         if (!listResponse.ok) {
@@ -158,9 +161,7 @@ async function loadAllExamples() {
                 const response = await fetch(item.file);
                 if (!response.ok) {
                     renderedExamples.push(`
-                        <div class="error">
-                            ❌ Datei nicht gefunden: ${item.file}
-                        </div>
+                        <div class="error">❌ Datei nicht gefunden: ${item.file}</div>
                     `);
                     continue;
                 }
@@ -172,9 +173,7 @@ async function loadAllExamples() {
                 renderedExamples.push(createExampleHtml(meta, htmlContent));
             } catch (err) {
                 renderedExamples.push(`
-                    <div class="error">
-                        ❌ Fehler bei ${item.file}: ${err.message}
-                    </div>
+                    <div class="error">❌ Fehler bei ${item.file}: ${err.message}</div>
                 `);
             }
         }
