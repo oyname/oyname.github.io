@@ -5,6 +5,6 @@ download: files/example1.zip
 downloadLabel: Datei herunterladen
 ---
 
-Das ist das vierte Beispiel.
+Das ist das erste Beispiel.
 
 Hier steht die Beschreibung.
