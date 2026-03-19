@@ -37,6 +37,28 @@ function initSlider() {
     resetInterval();
 }
 
+function loadMarkdown(targetId, markdownFile) {
+    fetch(markdownFile)
+        .then(response => {
+            if (!response.ok) throw new Error('Datei nicht gefunden');
+            return response.text();
+        })
+        .then(markdown => {
+            const converter = new showdown.Converter({
+                tables: true,
+                ghCompatibleHeaderId: true,
+                simplifiedAutoLink: true,
+                strikethrough: true
+            });
+
+            document.getElementById(targetId).innerHTML = converter.makeHtml(markdown);
+        })
+        .catch(error => {
+            document.getElementById(targetId).innerHTML =
+                '<div class="error">❌ Fehler beim Laden: ' + error.message + '</div>';
+        });
+}
+
 function parseFrontmatter(text) {
     const frontmatterRegex = /^---\s*([\s\S]*?)\s*---\s*([\s\S]*)$/;
     const match = text.match(frontmatterRegex);
