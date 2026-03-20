@@ -5,6 +5,4 @@ download: files/example4.zip
 downloadLabel: Download
 ---
 
-Das ist das vierte Beispiel.
-
-Hier steht die Beschreibung.
+A Snake game with an orthographic camera that demonstrates 2D rendering, grid-based movement, and simple gameplay logic in the GIDX Engine.
