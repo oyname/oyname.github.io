@@ -11,7 +11,7 @@ Typical direct usage path:
 5. Create DX11 context with `GDXWin32DX11ContextFactory`
 6. Create `GDXDX11RenderBackend`
 7. Create `GDXECSRenderer`
-8. Create `GDXEngine`
+8. Create `GIDXEngine`
 9. Call `Initialize()`
 10. Create camera, mesh/material, renderable entities
 11. Run with `Run()` or `Step()`
@@ -110,15 +110,15 @@ public:
 
 ---
 
-## `GDXEngine`
+## `GIDXEngine`
 
 Top-level runtime loop.
 
 ```cpp
-class GDXEngine
+class GIDXEngine
 {
 public:
-    GDXEngine(std::unique_ptr<IGDXWindow> window,
+    GIDXEngine(std::unique_ptr<IGDXWindow> window,
               std::unique_ptr<IGDXRenderer> renderer,
               GDXEventQueue& events);
 
@@ -137,7 +137,7 @@ public:
 ```
 
 ### Functions
-- `GDXEngine(std::unique_ptr<IGDXWindow> window, std::unique_ptr<IGDXRenderer> renderer, GDXEventQueue& events)`  
+- `GIDXEngine(std::unique_ptr<IGDXWindow> window, std::unique_ptr<IGDXRenderer> renderer, GDXEventQueue& events)`  
   Creates the engine runtime and takes ownership of window and renderer.
 - `Initialize()`  
   Initializes renderer and runtime state.
@@ -307,7 +307,7 @@ public:
 
 ## `IGDXRenderer`
 
-Generic renderer interface used by `GDXEngine`.
+Generic renderer interface used by `GIDXEngine`.
 
 ```cpp
 class IGDXRenderer
@@ -983,7 +983,7 @@ auto dxContext = factory.Create(*window, bestAdapter);
 auto backend = std::make_unique<GDXDX11RenderBackend>(std::move(dxContext));
 auto renderer = std::make_unique<GDXECSRenderer>(std::move(backend));
 
-GDXEngine engine(std::move(window), std::move(renderer), events);
+GIDXEngine engine(std::move(window), std::move(renderer), events);
 engine.Initialize();
 engine.Run();
 engine.Shutdown();
@@ -1008,7 +1008,7 @@ If you want to use the engine as a real user, the core surface is:
 - `GDXWin32DX11ContextFactory`
 - `GDXDX11RenderBackend`
 - `GDXECSRenderer`
-- `GDXEngine`
+- `GIDXEngine`
 - `Registry`
 - important ECS components
 - `SubmeshData`
