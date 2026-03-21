@@ -1,4 +1,4 @@
-# OYNAME2 ENGINE API REFERENCE
+# OYNAME ENGINE API REFERENCE
 
 This reference describes how to use the OYNAME Engine API.
 
