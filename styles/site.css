@@ -274,7 +274,7 @@ body {
 }
 
 .example-item.no-image .example-text h2 {
-    text-align: center !important;
+    text-align: left;
 }
 
 .example-item.no-image .example-description {
