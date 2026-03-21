@@ -258,13 +258,12 @@ body {
 }
 
 .example-item.no-image {
-    display: flex;
-    justify-content: center;
+    display: block;
 }
 
 .example-item.no-image .example-text {
-    width: 100%;
     max-width: 900px;
+    margin: 0 auto;
 }
 
 .example-item.no-image .example-text h2 {
