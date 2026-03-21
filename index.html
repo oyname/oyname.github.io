@@ -272,11 +272,13 @@
             white-space: nowrap;
         }
 
+        .news-section,
         .examples-section {
             max-width: 1100px;
             margin: 0 auto 50px auto;
         }
 
+        .news-panel,
         .examples-panel {
             background: rgba(18, 22, 32, 0.9);
             border-radius: 28px;
@@ -285,6 +287,7 @@
             color: #eef2ff;
         }
 
+        .news-panel h1,
         .examples-panel h1 {
             font-size: 2.3rem;
             font-weight: 700;
@@ -297,6 +300,7 @@
             padding-left: 20px;
         }
 
+        #news-container,
         #examples-container {
             display: flex;
             flex-direction: column;
@@ -314,6 +318,10 @@
             padding: 24px;
         }
 
+        .example-item.no-image {
+            grid-template-columns: 1fr;
+        }
+
         .example-image img {
             width: 100%;
             display: block;
@@ -322,15 +330,31 @@
             background: #111;
         }
 
+        .example-text {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .example-item.no-image .example-text {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
         .example-text h2 {
             font-size: 1.6rem;
+            margin-top: 0;
             margin-bottom: 14px;
             color: #c6e0ff;
+        }
+
+        .example-item.no-image .example-text h2 {
+            text-align: center;
         }
 
         .example-description {
             color: #e2e8f5;
             line-height: 1.7;
+            width: 100%;
         }
 
         .example-description p,
@@ -339,6 +363,10 @@
         .example-description pre,
         .example-description blockquote {
             margin-bottom: 1rem;
+        }
+
+        .example-item.no-image .example-description p {
+            text-align: justify;
         }
 
         .example-description code {
@@ -455,6 +483,7 @@
                 padding: 50px 20px;
             }
 
+            .news-panel,
             .examples-panel {
                 padding: 30px 22px;
             }
@@ -528,10 +557,10 @@
 
             <div class="news-section">
                 <div class="news-panel">
-                    <h1></h1>
-                        <div id="news-container">
-                            <div class="loading">📰 Lade News...</div>
-                        </div>
+                    <h1>News</h1>
+                    <div id="news-container">
+                        <div class="loading">📰 Lade News...</div>
+                    </div>
                 </div>
             </div>
 
