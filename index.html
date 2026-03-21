@@ -19,7 +19,7 @@
         }
 
         .navbar {
-            position: absolute;
+            position: fixed;
             top: 0;
             left: 0;
             right: 0;
@@ -113,15 +113,14 @@
             visibility: hidden;
         }
 
-        /* Hero Section - genau 100vh hoch */
-        .hero {
-            height: 100vh;
+        /* FIXED BACKGROUND - bleibt immer im Hintergrund */
+        .fixed-background {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            position: relative;
-            display: flex;
-            align-items: center;
-            color: white;
-            overflow: hidden;
+            height: 100%;
+            z-index: 0;
         }
 
         .slider {
@@ -165,12 +164,25 @@
             z-index: 1;
         }
 
-        .content {
+        /* SCROLLBARER CONTENT - liegt über dem fixen Hintergrund */
+        .scrollable-content {
             position: relative;
             z-index: 10;
-            max-width: 700px;
+            min-height: 100vh;
+        }
+
+        /* Hero Content - erste Bildschirmhöhe */
+        .hero-content {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            color: white;
             padding-left: 50px;
-            transform: translateY(0);
+            position: relative;
+        }
+
+        .hero-text {
+            max-width: 700px;
             animation: slideUp 1s ease-out;
         }
 
@@ -223,8 +235,6 @@
             cursor: pointer;
             border-radius: 4px;
             transition: all 0.3s;
-            position: relative;
-            overflow: hidden;
             text-decoration: none;
             text-align: center;
         }
@@ -253,11 +263,11 @@
             border-color: #0078f2;
         }
 
+        /* Game Info Button unten links im Hero */
         .game-info {
             position: absolute;
             bottom: 30px;
             left: 50px;
-            z-index: 10;
             display: flex;
             align-items: center;
             gap: 15px;
@@ -296,9 +306,9 @@
             position: absolute;
             bottom: 30px;
             right: 50px;
-            z-index: 10;
             display: flex;
             gap: 10px;
+            z-index: 20;
         }
 
         .indicator {
@@ -320,13 +330,13 @@
             background: #0078f2;
         }
 
-        /* NEU: Content-Bereich UNTER dem Hero - muss gescrollt werden */
+        /* BEREICH UNTER DEM HERO - muss gescrollt werden */
         .below-hero {
             position: relative;
-            z-index: 5;
             background: linear-gradient(135deg, #0a0e17 0%, #0c1020 100%);
             padding: 80px 30px 100px 30px;
             width: 100%;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
         }
 
         .markdown-container {
@@ -498,7 +508,7 @@
             .nav-links {
                 display: none;
             }
-            .content {
+            .hero-content {
                 padding-left: 20px;
                 padding-right: 20px;
             }
@@ -507,6 +517,9 @@
             }
             .engine-name span {
                 font-size: 20px;
+            }
+            .description {
+                max-width: 100%;
             }
             .buttons {
                 flex-direction: column;
@@ -529,85 +542,90 @@
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="logo">
-            <img src="oynameengine_logo.png"
-                 width="275"
-                 height="40"
-                 alt="OYNAME Engine"
-                 onerror="this.classList.add('error'); this.nextElementSibling.style.display = 'block';">
-            <div class="logo-fallback">OYNAME</div>
-        </div>
-
-        <div class="nav-links">
-            <a href="https://oyname.github.io/index.html">Home</a>
-            <a href="https://oyname.github.io/architecture.html">Architecture</a>
-            <a href="https://oyname.github.io/apioverview.html">API Overview</a>
-            <a href="https://oyname.github.io/reference.html">API Reference</a>
-            <a href="https://oyname.github.io/examples.html">Learning</a>
-        </div>
-
-        <div class="navbar-placeholder"></div>
-    </nav>
-
-    <!-- HERO SECTION - genau eine Bildschirmhöhe -->
-    <div class="hero">
+    <!-- FIXER HINTERGRUND - bleibt immer stehen -->
+    <div class="fixed-background">
         <div class="slider">
             <div class="slide active" style="background-image: url('oyname_image1.png')"></div>
             <div class="slide" style="background-image: url('oyname_image2.png')"></div>
             <div class="slide" style="background-image: url('oyname_image3.png')"></div>
             <div class="slide" style="background-image: url('oyname_image4.png')"></div>
         </div>
-
         <div class="overlay"></div>
-
-        <div class="content">
-            <div class="engine-name">
-                OYNAME ENGINE
-                <span>Creativity. Imagination. Technology.</span>
-            </div>
-
-            <div class="description">
-                Traditional graphics APIs provide the necessary interfaces for hardware access, but they are often complex to use.
-                The OYNAME Engine simplifies this process by handling core tasks such as initialization, media playback, and application shutdown.
-            </div>
-
-            <div class="buttons">
-                <a class="btn btn-primary" href="https://github.com/oyname/OYNAME2-Engine/tree/main" target="_blank" rel="noopener noreferrer">
-                    Get OYNAME Engine
-                </a>
-                <a href="license.html" class="btn btn-secondary">Learn about licensing</a>
-            </div>
-        </div>
-
-        <a href="https://oyname.itch.io/" class="game-info">
-            <div class="game-logo">🎮</div>
-            <div class="game-name">OYNAME Studio · Our Games Here</div>
-        </a>
-
-        <div class="slide-indicators">
-            <div class="indicator active"></div>
-            <div class="indicator"></div>
-            <div class="indicator"></div>
-            <div class="indicator"></div>
-        </div>
     </div>
 
-    <!-- NEU: BEREICH UNTER DEM HERO - muss der Besucher runterscrollen -->
-    <div class="below-hero">
-        <div class="markdown-container">
-            <div id="dynamic-markdown" class="markdown-content">
-                <div class="markdown-loading">
-                    📄 Loading documentation from markdown file...
+    <!-- SCROLLBARER CONTENT -->
+    <div class="scrollable-content">
+        <nav class="navbar">
+            <div class="logo">
+                <img src="oynameengine_logo.png"
+                     width="275"
+                     height="40"
+                     alt="OYNAME Engine"
+                     onerror="this.classList.add('error'); this.nextElementSibling.style.display = 'block';">
+                <div class="logo-fallback">OYNAME</div>
+            </div>
+
+            <div class="nav-links">
+                <a href="https://oyname.github.io/index.html">Home</a>
+                <a href="https://oyname.github.io/architecture.html">Architecture</a>
+                <a href="https://oyname.github.io/apioverview.html">API Overview</a>
+                <a href="https://oyname.github.io/reference.html">API Reference</a>
+                <a href="https://oyname.github.io/examples.html">Learning</a>
+            </div>
+
+            <div class="navbar-placeholder"></div>
+        </nav>
+
+        <!-- Hero Bereich mit Text -->
+        <div class="hero-content">
+            <div class="hero-text">
+                <div class="engine-name">
+                    OYNAME ENGINE
+                    <span>Creativity. Imagination. Technology.</span>
                 </div>
+
+                <div class="description">
+                    Traditional graphics APIs provide the necessary interfaces for hardware access, but they are often complex to use.
+                    The OYNAME Engine simplifies this process by handling core tasks such as initialization, media playback, and application shutdown.
+                </div>
+
+                <div class="buttons">
+                    <a class="btn btn-primary" href="https://github.com/oyname/OYNAME2-Engine/tree/main" target="_blank" rel="noopener noreferrer">
+                        Get OYNAME Engine
+                    </a>
+                    <a href="license.html" class="btn btn-secondary">Learn about licensing</a>
+                </div>
+            </div>
+
+            <a href="https://oyname.itch.io/" class="game-info">
+                <div class="game-logo">🎮</div>
+                <div class="game-name">OYNAME Studio · Our Games Here</div>
+            </a>
+
+            <div class="slide-indicators">
+                <div class="indicator active"></div>
+                <div class="indicator"></div>
+                <div class="indicator"></div>
+                <div class="indicator"></div>
             </div>
         </div>
 
-        <div class="game-info-large">
-            <a href="https://oyname.itch.io/" class="game-info-button">
-                <div class="game-logo-large">🎮</div>
-                <span>OYNAME Studio · Explore Our Games</span>
-            </a>
+        <!-- Bereich UNTER dem Hero - muss der Besucher scrollen -->
+        <div class="below-hero">
+            <div class="markdown-container">
+                <div id="dynamic-markdown" class="markdown-content">
+                    <div class="markdown-loading">
+                        📄 Loading documentation from markdown file...
+                    </div>
+                </div>
+            </div>
+
+            <div class="game-info-large">
+                <a href="https://oyname.itch.io/" class="game-info-button">
+                    <div class="game-logo-large">🎮</div>
+                    <span>OYNAME Studio · Explore Our Games</span>
+                </a>
+            </div>
         </div>
     </div>
 
@@ -643,13 +661,15 @@
 
         let slideInterval = setInterval(nextSlide, 5000);
 
-        const hero = document.querySelector('.hero');
-        hero.addEventListener('mouseenter', () => {
-            clearInterval(slideInterval);
-        });
-        hero.addEventListener('mouseleave', () => {
-            slideInterval = setInterval(nextSlide, 5000);
-        });
+        const hero = document.querySelector('.hero-content');
+        if (hero) {
+            hero.addEventListener('mouseenter', () => {
+                clearInterval(slideInterval);
+            });
+            hero.addEventListener('mouseleave', () => {
+                slideInterval = setInterval(nextSlide, 5000);
+            });
+        }
 
         // Markdown Loader
         const markdownContainer = document.getElementById('dynamic-markdown');
@@ -672,7 +692,6 @@
                     markdownContainer.innerHTML = `<pre>${escapeHtml(markdownText)}</pre>`;
                 }
             } catch (error) {
-                console.warn('Error loading markdown:', error);
                 markdownContainer.innerHTML = `
                     <div class="markdown-error">
                         ⚠️ Markdown file "${MARKDOWN_FILE_PATH}" not found.<br/>
