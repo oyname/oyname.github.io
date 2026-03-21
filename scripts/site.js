@@ -205,3 +205,54 @@ async function loadAllExamples() {
         container.innerHTML = `<div class="error">❌ Fehler beim Laden: ${error.message}</div>`;
     }
 }
+
+async function loadAllNews() {
+    const container = document.getElementById('news-container');
+
+    if (!container) return;
+
+    try {
+        const listResponse = await fetch('data/news.json');
+        if (!listResponse.ok) {
+            throw new Error('news.json konnte nicht geladen werden');
+        }
+
+        const newsItems = await listResponse.json();
+
+        if (!Array.isArray(newsItems) || newsItems.length === 0) {
+            container.innerHTML = '<div class="error">❌ Keine News gefunden.</div>';
+            return;
+        }
+
+        const converter = new showdown.Converter({
+            tables: true,
+            ghCompatibleHeaderId: true,
+            simplifiedAutoLink: true,
+            strikethrough: true
+        });
+
+        const renderedNews = [];
+
+        for (const item of newsItems) {
+            try {
+                const response = await fetch(item.file);
+                if (!response.ok) {
+                    renderedNews.push(`<div class="error">❌ Datei nicht gefunden: ${item.file}</div>`);
+                    continue;
+                }
+
+                const text = await response.text();
+                const { meta, content } = parseFrontmatter(text);
+                const htmlContent = converter.makeHtml(content);
+
+                renderedNews.push(createExampleHtml(meta, htmlContent));
+            } catch (err) {
+                renderedNews.push(`<div class="error">❌ Fehler bei ${item.file}: ${err.message}</div>`);
+            }
+        }
+
+        container.innerHTML = renderedNews.join('');
+    } catch (error) {
+        container.innerHTML = `<div class="error">❌ Fehler beim Laden: ${error.message}</div>`;
+    }
+}
