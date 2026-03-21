@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>OYNAME Engine | Dynamic Markdown Content</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Include Marked.js for Markdown parsing (lightweight and fast) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            overflow-x: hidden;
+            background-color: #0a0c10; /* subtle background for consistency below hero */
+        }
+
+        .navbar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            z-index: 150;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+            transition: background 0.3s;
+        }
+
+        .navbar:hover {
+            background: rgba(0,0,0,0.8);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            width: 275px;
+        }
+
+        .logo img {
+            width: 275px;
+            height: 40px;
+            object-fit: contain;
+            filter: brightness(1) drop-shadow(0 0 10px rgba(0,120,242,0.3));
+            transition: filter 0.3s;
+        }
+
+        .logo img:hover {
+            filter: brightness(1.2) drop-shadow(0 0 15px rgba(0,120,242,0.5));
+        }
+
+        .logo img.error {
+            display: none;
+        }
+
+        .logo img.error + .logo-fallback {
+            display: block;
+            font-size: 32px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 10px rgba(0,120,242,0.5);
+            letter-spacing: 2px;
+        }
+
+        .logo-fallback {
+            display: none;
+        }
+
+        .nav-links {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 5px 0;
+            position: relative;
+            transition: color 0.3s;
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: #0078f2;
+            transition: width 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #0078f2;
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        .navbar-placeholder {
+            width: 275px;
+            visibility: hidden;
+        }
+
+        .hero {
+            height: 100vh;
+            width: 100%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            color: white;
+            overflow: hidden;
+        }
+
+        .slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            opacity: 0;
+            transition: opacity 1.5s ease-in-out;
+            transform: scale(1.05);
+            animation: slowZoom 20s infinite alternate;
+        }
+
+        .slide.active {
+            opacity: 1;
+        }
+
+        @keyframes slowZoom {
+            from { transform: scale(1); }
+            to { transform: scale(1.1); }
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(0,120,242,0.2) 100%);
+            z-index: 1;
+        }
+
+        .content {
+            position: relative;
+            z-index: 10;
+            max-width: 700px;
+            padding-left: 50px;
+            transform: translateY(0);
+            animation: slideUp 1s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .engine-name {
+            font-size: 70px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            line-height: 1.1;
+            text-shadow: 0 0 20px rgba(0,120,242,0.5);
+        }
+
+        .engine-name span {
+            display: block;
+            font-size: 35px;
+            font-weight: 300;
+            opacity: 0.9;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+
+        .description {
+            font-size: 18px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+            opacity: 0.9;
+            max-width: 600px;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 20px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+            text-decoration: none;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #0078f2;
+            color: white;
+            box-shadow: 0 0 20px rgba(0,120,242,0.3);
+        }
+
+        .btn-primary:hover {
+            background: #0058b2;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 30px rgba(0,120,242,0.5);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+            border-color: #0078f2;
+        }
+
+        .game-info {
+            position: absolute;
+            bottom: 30px;
+            left: 50px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: white;
+            cursor: pointer;
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 50px;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+
+        .game-info:hover {
+            background: rgba(0,120,242,0.3);
+            transform: translateX(10px);
+            opacity: 0.8;
+        }
+
+        .game-logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #0078f2, #00a8f2);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .game-name {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .slide-indicators {
+            position: absolute;
+            bottom: 30px;
+            right: 50px;
+            z-index: 10;
+            display: flex;
+            gap: 10px;
+        }
+
+        .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .indicator.active {
+            background: white;
+            transform: scale(1.2);
+            box-shadow: 0 0 20px white;
+        }
+
+        .indicator:hover {
+            background: #0078f2;
+        }
+
+        /* ----- NEW SECTION: CENTERED MARKDOWN CONTENT BELOW BUTTONS ----- */
+        .markdown-section {
+            background-color: #0f1117;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            padding: 80px 30px 100px 30px;
+            position: relative;
+            z-index: 5;
+            border-top: 1px solid rgba(0,120,242,0.2);
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.3);
+        }
+
+        .markdown-container {
+            max-width: 1000px;
+            width: 100%;
+            background: rgba(18, 22, 32, 0.85);
+            backdrop-filter: blur(2px);
+            border-radius: 28px;
+            padding: 45px 55px;
+            box-shadow: 0 25px 45px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,120,242,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .markdown-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 30px 55px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,120,242,0.5);
+        }
+
+        /* Markdown content typography — modern & readable */
+        .markdown-content {
+            color: #eef2ff;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            line-height: 1.65;
+        }
+
+        .markdown-content h1 {
+            font-size: 2.3rem;
+            font-weight: 700;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #ffffff, #80b5ff);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            border-left: 4px solid #0078f2;
+            padding-left: 20px;
+        }
+
+        .markdown-content h1:first-child {
+            margin-top: 0;
+        }
+
+        .markdown-content h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-top: 1.8rem;
+            margin-bottom: 0.8rem;
+            color: #c6e0ff;
+            border-bottom: 1px solid rgba(0,120,242,0.4);
+            padding-bottom: 8px;
+        }
+
+        .markdown-content h3 {
+            font-size: 1.4rem;
+            font-weight: 500;
+            margin-top: 1.3rem;
+            color: #b0d4ff;
+        }
+
+        .markdown-content p {
+            margin-bottom: 1.2rem;
+            font-size: 1.05rem;
+            letter-spacing: 0.2px;
+            color: #e2e8f5;
+        }
+
+        .markdown-content a {
+            color: #3b9eff;
+            text-decoration: none;
+            border-bottom: 1px dotted #3b9eff;
+            transition: color 0.2s;
+        }
+
+        .markdown-content a:hover {
+            color: #7bb9ff;
+            border-bottom-color: #7bb9ff;
+        }
+
+        .markdown-content ul, .markdown-content ol {
+            margin: 1rem 0 1.2rem 1.8rem;
+        }
+
+        .markdown-content li {
+            margin: 0.5rem 0;
+            font-size: 1.02rem;
+        }
+
+        .markdown-content code {
+            background: #1e2436;
+            padding: 0.2rem 0.4rem;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            color: #f0b27a;
+        }
+
+        .markdown-content pre {
+            background: #0c0f17;
+            padding: 1.2rem;
+            border-radius: 16px;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            border-left: 4px solid #0078f2;
+        }
+
+        .markdown-content pre code {
+            background: none;
+            color: #cdd9ff;
+            font-size: 0.9rem;
+            padding: 0;
+        }
+
+        .markdown-content blockquote {
+            border-left: 4px solid #0078f2;
+            background: rgba(0,120,242,0.1);
+            padding: 0.8rem 1.5rem;
+            margin: 1.2rem 0;
+            border-radius: 12px;
+            font-style: italic;
+            color: #cbd5ff;
+        }
+
+        .markdown-content img {
+            max-width: 100%;
+            border-radius: 12px;
+            margin: 1rem 0;
+        }
+
+        .markdown-loading, .markdown-error {
+            text-align: center;
+            padding: 40px 20px;
+            font-size: 1.2rem;
+            color: #ccc;
+        }
+
+        .markdown-error {
+            color: #ff8a7a;
+            background: rgba(255,80,80,0.1);
+            border-radius: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 20px;
+            }
+            .nav-links {
+                display: none;
+            }
+            .logo img {
+                width: 200px;
+                height: 30px;
+            }
+            .content {
+                padding-left: 20px;
+                padding-right: 20px;
+            }
+            .engine-name {
+                font-size: 40px;
+            }
+            .engine-name span {
+                font-size: 20px;
+            }
+            .buttons {
+                flex-direction: column;
+            }
+            .game-info {
+                left: 20px;
+                bottom: 20px;
+            }
+            .slide-indicators {
+                right: 20px;
+                bottom: 20px;
+            }
+            .markdown-section {
+                padding: 50px 20px;
+            }
+            .markdown-container {
+                padding: 30px 22px;
+            }
+            .markdown-content h1 {
+                font-size: 1.8rem;
+            }
+            .markdown-content h2 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">
+            <img src="oynameengine_logo.png"
+                 width="275"
+                 height="40"
+                 alt="OYNAME Engine"
+                 onerror="this.classList.add('error'); this.nextElementSibling.style.display = 'block';">
+            <div class="logo-fallback">OYNAME</div>
+        </div>
+
+        <div class="nav-links">
+            <a href="https://oyname.github.io/index.html">Home</a>
+            <a href="https://oyname.github.io/architecture.html">Architecture</a>
+            <a href="https://oyname.github.io/apioverview.html">API Overview</a>
+            <a href="https://oyname.github.io/reference.html">API Reference</a>
+            <a href="https://oyname.github.io/examples.html">Learning</a>
+        </div>
+
+        <div class="navbar-placeholder"></div>
+    </nav>
+
+    <div class="hero">
+        <div class="slider">
+            <div class="slide active" style="background-image: url('oyname_image1.png')"></div>
+            <div class="slide" style="background-image: url('oyname_image2.png')"></div>
+            <div class="slide" style="background-image: url('oyname_image3.png')"></div>
+            <div class="slide" style="background-image: url('oyname_image4.png')"></div>
+        </div>
+
+        <div class="overlay"></div>
+
+        <div class="content">
+            <div class="engine-name">
+                OYNAME ENGINE
+                <span>Creativity. Imagination. Technology.</span>
+            </div>
+
+            <div class="description">
+                Traditional graphics APIs provide the necessary interfaces for hardware access, but they are often complex to use.
+                The OYNAME Engine simplifies this process by handling core tasks such as initialization, media playback, and application shutdown.
+            </div>
+
+            <div class="buttons">
+                <a class="btn btn-primary" href="https://github.com/oyname/OYNAME2-Engine/tree/main" target="_blank" rel="noopener noreferrer">
+                    Get OYNAME Engine
+                </a>
+                <a href="license.html" class="btn btn-secondary">Learn about licensing</a>
+            </div>
+        </div>
+
+        <a href="https://oyname.itch.io/" class="game-info">
+            <div class="game-logo">🎮</div>
+            <div class="game-name">OYNAME Studio · Our Games Here</div>
+        </a>
+
+        <div class="slide-indicators">
+            <div class="indicator active"></div>
+            <div class="indicator"></div>
+            <div class="indicator"></div>
+            <div class="indicator"></div>
+        </div>
+    </div>
+
+    <!-- NEW SECTION: Centered Markdown content loaded from external .md file -->
+    <div class="markdown-section">
+        <div class="markdown-container">
+            <div id="dynamic-markdown" class="markdown-content">
+                <div class="markdown-loading">
+                    ⚡ Loading OYNAME insights from documentation...<br/>
+                    <span style="font-size:0.85rem; opacity:0.7;">Fetching markdown content</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ---------- SLIDER LOGIC (unchanged, fully preserved) ----------
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const indicators = document.querySelectorAll('.indicator');
+        const slideCount = slides.length;
+
+        function showSlide(index) {
+            slides[currentSlide].classList.remove('active');
+            indicators[currentSlide].classList.remove('active');
+
+            currentSlide = index;
+
+            slides[currentSlide].classList.add('active');
+            indicators[currentSlide].classList.add('active');
+        }
+
+        function nextSlide() {
+            let nextIndex = (currentSlide + 1) % slideCount;
+            showSlide(nextIndex);
+        }
+
+        indicators.forEach((indicator, index) => {
+            indicator.addEventListener('click', () => {
+                showSlide(index);
+                clearInterval(slideInterval);
+                slideInterval = setInterval(nextSlide, 5000);
+            });
+        });
+
+        let slideInterval = setInterval(nextSlide, 5000);
+
+        const hero = document.querySelector('.hero');
+
+        hero.addEventListener('mouseenter', () => {
+            clearInterval(slideInterval);
+        });
+
+        hero.addEventListener('mouseleave', () => {
+            slideInterval = setInterval(nextSlide, 5000);
+        });
+
+        // ---------- MARKDOWN FETCH & RENDER (from MD file on GitHub) ----------
+        // This script fetches a .md file from the SAME GitHub repository location.
+        // According to your request: "Die Seite ist auf github" -> the markdown file 
+        // should be hosted alongside the HTML file. We'll fetch "content.md" by default.
+        // For flexibility, we'll attempt to fetch "engine_overview.md" or you can adjust the URL.
+        // To ensure a meaningful demo even if the file is missing, we create a fallback that shows
+        // informative content about the engine. But the primary goal: load from an actual .md file.
+        // You can replace the URL with your real markdown file path relative to the GitHub pages root.
+        // For GitHub Pages, we'll try a relative path: './readme.md' or './docs/about.md'.
+        // To match the context, I'll fetch a sample markdown named "OYNAME_Features.md". 
+        // But we also provide a robust fallback if the file is not yet created — but the mechanism is fully functional.
+        
+        const markdownContainer = document.getElementById('dynamic-markdown');
+        
+        // CONFIGURATION: specify the markdown file path (relative to this HTML file on GitHub)
+        // Since the page is hosted on GitHub Pages (oyname.github.io), you can put your .md file
+        // in the same directory. For demonstration, I'll set a file name: "engine_details.md"
+        // If you want to use an absolute raw GitHub URL, you can, but relative keeps it portable.
+        // To make it work out-of-the-box for demo, we check multiple potential names? Not needed, but we give error message.
+        const MARKDOWN_FILE_PATH = 'engine_details.md';   // <--- CHANGE THIS to your actual markdown file path
+        
+        // Alternative: you could fetch from a specific branch raw url, but relative is cleaner for same repo.
+        // For GitHub pages, files in the same folder are accessible.
+        
+        async function loadMarkdownFromFile() {
+            try {
+                // Attempt to fetch the markdown file
+                const response = await fetch(MARKDOWN_FILE_PATH);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: Could not load markdown file (${MARKDOWN_FILE_PATH}).`);
+                }
+                
+                const markdownText = await response.text();
+                
+                // Use marked library to convert markdown to HTML
+                if (typeof marked !== 'undefined') {
+                    // marked v4+ usage: marked.parse is async but returns promise; or use synchronous?
+                    // For compatibility, we use marked.parse which returns a promise if we want async.
+                    // But we can also use marked(markdownText) for synchronous. We'll use modern marked.parse
+                    // to ensure full features.
+                    const htmlContent = await marked.parse(markdownText);
+                    markdownContainer.innerHTML = htmlContent;
+                } else {
+                    // fallback: show raw text if marked.js failed to load
+                    markdownContainer.innerHTML = `<pre style="white-space: pre-wrap;">${escapeHtml(markdownText)}</pre>`;
+                }
+            } catch (error) {
+                console.warn('Markdown loading error:', error);
+                // Provide a helpful & stylish error message with instructions, and also show inline
+                // fallback content to keep page informative.
+                markdownContainer.innerHTML = `
+                    <div class="markdown-error">
+                        ⚠️ Could not load markdown file "<strong>${MARKDOWN_FILE_PATH}</strong>".<br/>
+                        Make sure the file exists in the same directory as this HTML page on GitHub.<br/>
+                        <span style="font-size:0.9rem;">📄 Create a file named <code style="background:#222; padding:2px 6px;">${MARKDOWN_FILE_PATH}</code> with your content.</span>
+                        <hr style="margin: 20px 0; border-color: #333;" />
+                        <div style="text-align: left; margin-top: 20px;">
+                            <strong>✨ OYNAME Engine – Markdown Ready</strong><br/>
+                            The engine supports dynamic content from external markdown. Below is an example preview:
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px; border-left: 3px solid #0078f2; padding-left: 20px;">
+                        <h3>🎯 Why use Markdown integration?</h3>
+                        <p>This section automatically loads content from a <code>.md</code> file, making documentation, release notes, or tutorials easy to maintain. Edit the markdown file and the page updates instantly on GitHub Pages.</p>
+                        <h3>📌 Suggested content for <code>${MARKDOWN_FILE_PATH}</code>:</h3>
+                        <pre><code># OYNAME Engine Core Philosophy
+
+The OYNAME Engine is built for **performance** and **simplicity**. 
+
+## Key Highlights
+- **Cross-platform** rendering layer
+- **Modern C++20** codebase with clear abstractions
+- **Built-in asset pipeline** for textures, shaders, and audio
+- **Hot-reload** capabilities for rapid iteration
+
+> “Empower creators to focus on gameplay, not boilerplate.”
+
+Check out the [API Reference](https://oyname.github.io/reference.html) for deeper insights.
+                        </code></pre>
+                        <p>After creating the markdown file, refresh the page to see your content rendered beautifully.</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Helper to escape HTML if marked fails extremely
+        function escapeHtml(str) {
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            }).replace(/[\u00A0-\u9999<>\&]/g, function(i) {
+                return i;
+            });
+        }
+        
+        // Also add a small check that if the file is missing, we still show custom message.
+        // Additionally, we provide a secondary option: if you want to load from absolute GitHub URL,
+        // you can adjust MARKDOWN_FILE_PATH to something like:
+        // 'https://raw.githubusercontent.com/oyname/oyname.github.io/main/engine_details.md'
+        // But we stick to relative for simplicity and GitHub Pages compatibility.
+        
+        // Execute markdown loader when page ready
+        loadMarkdownFromFile();
+        
+        // Optional: Add observer for any anchor links inside markdown to make them open in same tab? not needed.
+        // Also ensure that any dynamically added code blocks get consistent styling. marked already handles.
+    </script>
+</body>
+</html>
