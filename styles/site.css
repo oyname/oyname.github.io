@@ -212,7 +212,8 @@ body {
     box-shadow: 0 0 18px rgba(255,255,255,0.9);
 }
 
-#examples-container {
+#examples-container,
+#news-container {
     display: flex;
     flex-direction: column;
     gap: 40px;
@@ -221,7 +222,6 @@ body {
 
 .example-item {
     display: flex;
-    grid-template-columns: 1fr 1fr;
     gap: 30px;
     align-items: flex-start;
     padding: 30px;
@@ -242,6 +242,11 @@ body {
     border-radius: 10px;
     border: 1px solid rgba(255,255,255,0.12);
     box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+}
+
+.example-text {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .example-text h2 {
@@ -294,6 +299,11 @@ body {
 
 @media (max-width: 900px) {
     .example-item {
-        grid-template-columns: 1fr;
+        flex-direction: column;
+    }
+
+    .example-image {
+        flex: none;
+        max-width: 100%;
     }
 }
