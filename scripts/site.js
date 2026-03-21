@@ -1,4 +1,4 @@
-console.log('site.js geladen');
+onsole.log('site.js geladen');
 
 function initSlider() {
     const slides = document.querySelectorAll('.slide');
@@ -140,7 +140,7 @@ function createEntryHtml(meta, htmlContent) {
                     : ''
             }
             <div class="example-text">
-                <h2 style="text-align:left;">${meta.title || 'Ohne Titel'}</h2>
+                <h2>${meta.title || 'Ohne Titel'}</h2>
                 <div class="example-description">
                     ${htmlContent}
                 </div>
