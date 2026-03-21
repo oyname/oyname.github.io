@@ -257,6 +257,10 @@ body {
     line-height: 1.7;
 }
 
+.example-item.no-image {
+    grid-template-columns: 1fr;
+}
+
 .download-button {
     display: inline-block;
     margin-top: 10px;
