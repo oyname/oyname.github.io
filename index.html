@@ -113,7 +113,7 @@
             visibility: hidden;
         }
 
-        /* FIXED BACKGROUND - bleibt immer im Hintergrund */
+        /* FIXED BACKGROUND */
         .fixed-background {
             position: fixed;
             top: 0;
@@ -164,14 +164,14 @@
             z-index: 1;
         }
 
-        /* SCROLLBARER CONTENT - liegt über dem fixen Hintergrund */
+        /* SCROLLBARER CONTENT */
         .scrollable-content {
             position: relative;
             z-index: 10;
             min-height: 100vh;
         }
 
-        /* Hero Content - erste Bildschirmhöhe */
+        /* Hero Content */
         .hero-content {
             height: 100vh;
             display: flex;
@@ -291,7 +291,7 @@
             background: #0078f2;
         }
 
-        /* BEREICH UNTER DEM HERO - leicht sichtbar, lädt zum Scrollen ein */
+        /* UNTERER BEREICH */
         .below-hero {
             position: relative;
             background: linear-gradient(135deg, rgba(10,14,23,0.95) 0%, rgba(12,16,32,0.95) 100%);
@@ -301,7 +301,6 @@
             border-top: 1px solid rgba(0,120,242,0.3);
         }
 
-        /* Kleiner visueller Hinweis zum Scrollen */
         .scroll-hint {
             position: absolute;
             top: -30px;
@@ -451,12 +450,10 @@
             color: #ff8a7a;
         }
 
-        /* GAME BUTTON - NUR EINMAL, unten links im Design wie original */
+        /* GAME BUTTON */
         .game-info {
-            position: absolute;
-            bottom: 30px;
-            left: 50px;
-            display: flex;
+            position: relative;
+            display: inline-flex;
             align-items: center;
             gap: 15px;
             color: white;
@@ -467,7 +464,7 @@
             backdrop-filter: blur(5px);
             transition: all 0.3s;
             text-decoration: none;
-            z-index: 20;
+            margin-top: 20px;
         }
 
         .game-info:hover {
@@ -489,6 +486,198 @@
         .game-name {
             font-size: 14px;
             font-weight: 500;
+        }
+
+        /* ===== NEUE BEREICHE FÜR ZUSÄTZLICHEN CONTENT ===== */
+        
+        /* Features Section */
+        .features-section {
+            max-width: 1200px;
+            margin: 60px auto 60px auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            padding: 0 20px;
+        }
+
+        .feature-card {
+            background: rgba(18, 22, 32, 0.8);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s;
+            border: 1px solid rgba(0,120,242,0.2);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(0,120,242,0.5);
+            box-shadow: 0 10px 30px rgba(0,120,242,0.2);
+        }
+
+        .feature-icon {
+            font-size: 50px;
+            margin-bottom: 20px;
+        }
+
+        .feature-card h3 {
+            color: #0078f2;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .feature-card p {
+            color: #b0c4ff;
+            line-height: 1.6;
+        }
+
+        /* Video Section */
+        .video-section {
+            max-width: 900px;
+            margin: 60px auto;
+            text-align: center;
+            padding: 0 20px;
+        }
+
+        .video-section h2 {
+            color: white;
+            font-size: 2rem;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #fff, #0078f2);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        .video-container {
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+            overflow: hidden;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .video-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 20px;
+        }
+
+        /* Testimonials Section */
+        .testimonials-section {
+            max-width: 1000px;
+            margin: 60px auto;
+            padding: 0 20px;
+        }
+
+        .testimonials-section h2 {
+            text-align: center;
+            color: white;
+            font-size: 2rem;
+            margin-bottom: 40px;
+            background: linear-gradient(135deg, #fff, #0078f2);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        .testimonial-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+
+        .testimonial-card {
+            background: rgba(18, 22, 32, 0.8);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(0,120,242,0.2);
+        }
+
+        .testimonial-text {
+            color: #e2e8f5;
+            font-style: italic;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .testimonial-author {
+            color: #0078f2;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+
+        /* Newsletter Section */
+        .newsletter-section {
+            max-width: 700px;
+            margin: 60px auto 40px auto;
+            text-align: center;
+            padding: 40px;
+            background: linear-gradient(135deg, rgba(0,120,242,0.1), rgba(0,120,242,0.05));
+            border-radius: 30px;
+            border: 1px solid rgba(0,120,242,0.3);
+        }
+
+        .newsletter-section h2 {
+            color: white;
+            font-size: 1.8rem;
+            margin-bottom: 15px;
+        }
+
+        .newsletter-section p {
+            color: #b0c4ff;
+            margin-bottom: 25px;
+        }
+
+        .newsletter-form {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .newsletter-input {
+            padding: 12px 20px;
+            border-radius: 50px;
+            border: 1px solid rgba(0,120,242,0.5);
+            background: rgba(0,0,0,0.5);
+            color: white;
+            width: 280px;
+            font-size: 16px;
+        }
+
+        .newsletter-input:focus {
+            outline: none;
+            border-color: #0078f2;
+        }
+
+        .newsletter-btn {
+            padding: 12px 30px;
+            border-radius: 50px;
+            background: #0078f2;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .newsletter-btn:hover {
+            background: #0058b2;
+            transform: translateY(-2px);
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            border-top: 1px solid rgba(0,120,242,0.2);
+            margin-top: 60px;
+            color: #888;
+            font-size: 14px;
         }
 
         @media (max-width: 768px) {
@@ -514,10 +703,6 @@
             .buttons {
                 flex-direction: column;
             }
-            .game-info {
-                left: 20px;
-                bottom: 20px;
-            }
             .slide-indicators {
                 right: 20px;
                 bottom: 20px;
@@ -533,11 +718,14 @@
                 white-space: nowrap;
                 top: -25px;
             }
+            .features-section {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    <!-- FIXER HINTERGRUND - bleibt immer stehen -->
+    <!-- FIXER HINTERGRUND -->
     <div class="fixed-background">
         <div class="slider">
             <div class="slide active" style="background-image: url('oyname_image1.png')"></div>
@@ -571,7 +759,7 @@
             <div class="navbar-placeholder"></div>
         </nav>
 
-        <!-- Hero Bereich mit Text -->
+        <!-- Hero Bereich -->
         <div class="hero-content">
             <div class="hero-text">
                 <div class="engine-name">
@@ -600,13 +788,13 @@
             </div>
         </div>
 
-        <!-- Bereich UNTER dem Hero - Markdown und dann den Game Button -->
+        <!-- UNTERER BEREICH - Hier können Sie alles anhängen -->
         <div class="below-hero">
-            <!-- Kleiner visueller Hinweis zum Scrollen -->
             <div class="scroll-hint">
                 ↓ Scroll down for more ↓
             </div>
             
+            <!-- 1. MARKDOWN BEREICH -->
             <div class="markdown-container">
                 <div id="dynamic-markdown" class="markdown-content">
                     <div class="markdown-loading">
@@ -615,11 +803,85 @@
                 </div>
             </div>
 
-            <!-- GAME BUTTON - NUR EINMAL, unten links im original Design -->
+            <!-- 2. GAME BUTTON -->
             <a href="https://oyname.itch.io/" class="game-info">
                 <div class="game-logo">🎮</div>
                 <div class="game-name">OYNAME Studio · Our Games Here</div>
             </a>
+
+            <!-- ===== HIER KÖNNEN SIE WEITEREN CONTENT ANHÄNGEN ===== -->
+            
+            <!-- Beispiel: Features Section -->
+            <div class="features-section">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>High Performance</h3>
+                    <p>Optimized rendering pipeline with minimal overhead for maximum frame rates</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h3>Modern Graphics</h3>
+                    <p>Support for the latest rendering techniques and visual effects</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🛠️</div>
+                    <h3>Easy to Use</h3>
+                    <p>Clean API design that makes game development intuitive and fast</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🌍</div>
+                    <h3>Cross-Platform</h3>
+                    <p>Deploy your games on Windows, Linux, macOS, and more</p>
+                </div>
+            </div>
+
+            <!-- Beispiel: Video Section -->
+            <div class="video-section">
+                <h2>Watch OYNAME in Action</h2>
+                <div class="video-container">
+                    <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" frameborder="0" allowfullscreen></iframe>
+                </div>
+            </div>
+
+            <!-- Beispiel: Testimonials Section -->
+            <div class="testimonials-section">
+                <h2>What Developers Say</h2>
+                <div class="testimonial-grid">
+                    <div class="testimonial-card">
+                        <div class="testimonial-text">
+                            "OYNAME Engine completely changed how I approach game development. The API is intuitive and the performance is outstanding!"
+                        </div>
+                        <div class="testimonial-author">- Sarah Chen, Indie Developer</div>
+                    </div>
+                    <div class="testimonial-card">
+                        <div class="testimonial-text">
+                            "Finally an engine that balances power with simplicity. The learning curve is gentle but the capabilities are professional-grade."
+                        </div>
+                        <div class="testimonial-author">- Marcus Rodriguez, Game Designer</div>
+                    </div>
+                    <div class="testimonial-card">
+                        <div class="testimonial-text">
+                            "The documentation is excellent and the community support is fantastic. Highly recommended for any game project!"
+                        </div>
+                        <div class="testimonial-author">- Emily Watson, Technical Artist</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Beispiel: Newsletter Section -->
+            <div class="newsletter-section">
+                <h2>Stay Updated</h2>
+                <p>Get the latest news, updates, and tutorials about OYNAME Engine</p>
+                <form class="newsletter-form" onsubmit="alert('Thank you for subscribing!'); return false;">
+                    <input type="email" placeholder="Your email address" class="newsletter-input" required>
+                    <button type="submit" class="newsletter-btn">Subscribe</button>
+                </form>
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+                <p>© 2024 OYNAME Engine. All rights reserved. | Built with passion for game developers</p>
+            </div>
         </div>
     </div>
 
@@ -633,9 +895,7 @@
         function showSlide(index) {
             slides[currentSlide].classList.remove('active');
             indicators[currentSlide].classList.remove('active');
-
             currentSlide = index;
-
             slides[currentSlide].classList.add('active');
             indicators[currentSlide].classList.add('active');
         }
@@ -672,13 +932,10 @@
         async function loadMarkdownFromFile() {
             try {
                 const response = await fetch(MARKDOWN_FILE_PATH);
-                
                 if (!response.ok) {
                     throw new Error(`Markdown file not found: ${MARKDOWN_FILE_PATH}`);
                 }
-                
                 const markdownText = await response.text();
-                
                 if (typeof marked !== 'undefined') {
                     const htmlContent = await marked.parse(markdownText);
                     markdownContainer.innerHTML = htmlContent;
