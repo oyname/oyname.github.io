@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <title>OYNAME Engine</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+    <script src="scripts/site.js"></script>
+
     <style>
         * {
             margin: 0;
@@ -47,28 +50,6 @@
             height: 40px;
             object-fit: contain;
             filter: brightness(1) drop-shadow(0 0 10px rgba(0,120,242,0.3));
-            transition: filter 0.3s;
-        }
-
-        .logo img:hover {
-            filter: brightness(1.2) drop-shadow(0 0 15px rgba(0,120,242,0.5));
-        }
-
-        .logo img.error {
-            display: none;
-        }
-
-        .logo img.error + .logo-fallback {
-            display: block;
-            font-size: 32px;
-            font-weight: bold;
-            color: white;
-            text-shadow: 0 0 10px rgba(0,120,242,0.5);
-            letter-spacing: 2px;
-        }
-
-        .logo-fallback {
-            display: none;
         }
 
         .nav-links {
@@ -113,7 +94,6 @@
             visibility: hidden;
         }
 
-        /* FIXED BACKGROUND */
         .fixed-background {
             position: fixed;
             top: 0;
@@ -164,14 +144,12 @@
             z-index: 1;
         }
 
-        /* SCROLLBARER CONTENT */
         .scrollable-content {
             position: relative;
             z-index: 10;
             min-height: 100vh;
         }
 
-        /* Hero Content */
         .hero-content {
             height: 100vh;
             display: flex;
@@ -183,18 +161,6 @@
 
         .hero-text {
             max-width: 700px;
-            animation: slideUp 1s ease-out;
-        }
-
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
         }
 
         .engine-name {
@@ -210,7 +176,6 @@
             font-size: 35px;
             font-weight: 300;
             opacity: 0.9;
-            text-shadow: 0 0 10px rgba(255,255,255,0.3);
         }
 
         .description {
@@ -247,8 +212,6 @@
 
         .btn-primary:hover {
             background: #0058b2;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 30px rgba(0,120,242,0.5);
         }
 
         .btn-secondary {
@@ -259,7 +222,6 @@
 
         .btn-secondary:hover {
             background: rgba(255,255,255,0.1);
-            transform: translateY(-2px);
             border-color: #0078f2;
         }
 
@@ -287,11 +249,6 @@
             box-shadow: 0 0 20px white;
         }
 
-        .indicator:hover {
-            background: #0078f2;
-        }
-
-        /* UNTERER BEREICH */
         .below-hero {
             position: relative;
             background: linear-gradient(135deg, rgba(10,14,23,0.95) 0%, rgba(12,16,32,0.95) 100%);
@@ -313,47 +270,25 @@
             font-size: 14px;
             font-weight: 500;
             white-space: nowrap;
-            animation: bounce 2s infinite;
-            box-shadow: 0 0 20px rgba(0,120,242,0.5);
         }
 
-        @keyframes bounce {
-            0%, 100% {
-                transform: translateX(-50%) translateY(0);
-            }
-            50% {
-                transform: translateX(-50%) translateY(10px);
-            }
-        }
-
-        .markdown-container {
-            max-width: 1000px;
+        .examples-section {
+            max-width: 1100px;
             margin: 0 auto 50px auto;
+        }
+
+        .examples-panel {
             background: rgba(18, 22, 32, 0.9);
             border-radius: 28px;
             padding: 45px 55px;
             box-shadow: 0 25px 45px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,120,242,0.2);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            opacity: 0.95;
-        }
-
-        .markdown-container:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 30px 55px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,120,242,0.5);
-            opacity: 1;
-        }
-
-        .markdown-content {
             color: #eef2ff;
-            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.65;
         }
 
-        .markdown-content h1 {
+        .examples-panel h1 {
             font-size: 2.3rem;
             font-weight: 700;
-            margin-top: 1.5rem;
-            margin-bottom: 1rem;
+            margin-bottom: 30px;
             background: linear-gradient(135deg, #ffffff, #80b5ff);
             background-clip: text;
             -webkit-background-clip: text;
@@ -362,95 +297,93 @@
             padding-left: 20px;
         }
 
-        .markdown-content h1:first-child {
-            margin-top: 0;
+        #examples-container {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
         }
 
-        .markdown-content h2 {
-            font-size: 1.8rem;
-            font-weight: 600;
-            margin-top: 1.8rem;
-            margin-bottom: 0.8rem;
+        .example-item {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 28px;
+            align-items: start;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(0,120,242,0.25);
+            border-radius: 22px;
+            padding: 24px;
+        }
+
+        .example-image img {
+            width: 100%;
+            display: block;
+            border-radius: 16px;
+            object-fit: cover;
+            background: #111;
+        }
+
+        .example-text h2 {
+            font-size: 1.6rem;
+            margin-bottom: 14px;
             color: #c6e0ff;
-            border-bottom: 1px solid rgba(0,120,242,0.4);
-            padding-bottom: 8px;
         }
 
-        .markdown-content h3 {
-            font-size: 1.4rem;
-            font-weight: 500;
-            margin-top: 1.3rem;
-            color: #b0d4ff;
-        }
-
-        .markdown-content p {
-            margin-bottom: 1.2rem;
-            font-size: 1.05rem;
-            line-height: 1.6;
+        .example-description {
             color: #e2e8f5;
+            line-height: 1.7;
         }
 
-        .markdown-content a {
-            color: #3b9eff;
-            text-decoration: none;
-            border-bottom: 1px dotted #3b9eff;
+        .example-description p,
+        .example-description ul,
+        .example-description ol,
+        .example-description pre,
+        .example-description blockquote {
+            margin-bottom: 1rem;
         }
 
-        .markdown-content a:hover {
-            color: #7bb9ff;
-        }
-
-        .markdown-content ul, .markdown-content ol {
-            margin: 1rem 0 1.2rem 1.8rem;
-        }
-
-        .markdown-content li {
-            margin: 0.5rem 0;
-        }
-
-        .markdown-content code {
+        .example-description code {
             background: #1e2436;
             padding: 0.2rem 0.4rem;
             border-radius: 8px;
             font-family: monospace;
-            font-size: 0.9rem;
             color: #f0b27a;
         }
 
-        .markdown-content pre {
+        .example-description pre {
             background: #0c0f17;
-            padding: 1.2rem;
-            border-radius: 16px;
+            padding: 1rem;
+            border-radius: 14px;
             overflow-x: auto;
-            margin: 1.5rem 0;
             border-left: 4px solid #0078f2;
         }
 
-        .markdown-content pre code {
-            background: none;
-            padding: 0;
+        .download-button {
+            display: inline-block;
+            margin-top: 18px;
+            padding: 12px 24px;
+            background: #0078f2;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: 0.3s;
         }
 
-        .markdown-content blockquote {
-            border-left: 4px solid #0078f2;
-            background: rgba(0,120,242,0.1);
-            padding: 0.8rem 1.5rem;
-            margin: 1.2rem 0;
-            border-radius: 12px;
-            font-style: italic;
+        .download-button:hover {
+            background: #0058b2;
         }
 
-        .markdown-loading, .markdown-error {
+        .loading,
+        .error {
             text-align: center;
-            padding: 40px 20px;
-            font-size: 1.2rem;
+            padding: 30px 20px;
+            font-size: 1.1rem;
         }
 
-        .markdown-error {
+        .error {
             color: #ff8a7a;
         }
 
-        /* GAME BUTTON */
         .game-info {
             position: relative;
             display: inline-flex;
@@ -469,7 +402,6 @@
 
         .game-info:hover {
             background: rgba(0,120,242,0.3);
-            transform: translateX(10px);
         }
 
         .game-logo {
@@ -492,45 +424,48 @@
             .navbar {
                 padding: 20px;
             }
+
             .nav-links {
                 display: none;
             }
+
             .hero-content {
                 padding-left: 20px;
                 padding-right: 20px;
             }
+
             .engine-name {
                 font-size: 40px;
             }
+
             .engine-name span {
                 font-size: 20px;
             }
-            .description {
-                max-width: 100%;
-            }
+
             .buttons {
                 flex-direction: column;
             }
+
             .slide-indicators {
                 right: 20px;
                 bottom: 20px;
             }
-            .markdown-container {
-                padding: 30px 22px;
-            }
+
             .below-hero {
                 padding: 50px 20px;
             }
-            .scroll-hint {
-                font-size: 12px;
-                white-space: nowrap;
-                top: -25px;
+
+            .examples-panel {
+                padding: 30px 22px;
+            }
+
+            .example-item {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
-    <!-- FIXER HINTERGRUND -->
     <div class="fixed-background">
         <div class="slider">
             <div class="slide active" style="background-image: url('oyname_image1.png')"></div>
@@ -541,16 +476,10 @@
         <div class="overlay"></div>
     </div>
 
-    <!-- SCROLLBARER CONTENT -->
     <div class="scrollable-content">
         <nav class="navbar">
             <div class="logo">
-                <img src="oynameengine_logo.png"
-                     width="275"
-                     height="40"
-                     alt="OYNAME Engine"
-                     onerror="this.classList.add('error'); this.nextElementSibling.style.display = 'block';">
-                <div class="logo-fallback">OYNAME</div>
+                <img src="oynameengine_logo.png" alt="OYNAME Engine">
             </div>
 
             <div class="nav-links">
@@ -564,7 +493,6 @@
             <div class="navbar-placeholder"></div>
         </nav>
 
-        <!-- Hero Bereich -->
         <div class="hero-content">
             <div class="hero-text">
                 <div class="engine-name">
@@ -593,16 +521,15 @@
             </div>
         </div>
 
-        <!-- UNTERER BEREICH - HIER KÖNNEN SIE IHREN EIGENEN CODE EINFÜGEN -->
         <div class="below-hero">
             <div class="scroll-hint">
                 ↓ Scroll down for more ↓
             </div>
-                        
-            <div class="examples-container-wrapper">
+
+            <div class="examples-section">
                 <div class="examples-panel">
                     <h1>Learning</h1>
-                    <div id="examples-container" class="examples-container">
+                    <div id="examples-container">
                         <div class="loading">📄 Lade Beispiele...</div>
                     </div>
                 </div>
@@ -612,106 +539,12 @@
                 <div class="game-logo">🎮</div>
                 <div class="game-name">OYNAME Studio · Our Games Here</div>
             </a>
-
-            <!-- HIER KÖNNEN SIE IHREN EIGENEN CODE EINFÜGEN -->
-            <!-- Einfach hier Ihren gewünschten Inhalt einfügen -->
-            
         </div>
     </div>
 
     <script>
-        // Slider Logic
-        let currentSlide = 0;
-        const slides = document.querySelectorAll('.slide');
-        const indicators = document.querySelectorAll('.indicator');
-        const slideCount = slides.length;
-
-        function showSlide(index) {
-            slides[currentSlide].classList.remove('active');
-            indicators[currentSlide].classList.remove('active');
-            currentSlide = index;
-            slides[currentSlide].classList.add('active');
-            indicators[currentSlide].classList.add('active');
-        }
-
-        function nextSlide() {
-            let nextIndex = (currentSlide + 1) % slideCount;
-            showSlide(nextIndex);
-        }
-
-        indicators.forEach((indicator, index) => {
-            indicator.addEventListener('click', () => {
-                showSlide(index);
-                clearInterval(slideInterval);
-                slideInterval = setInterval(nextSlide, 5000);
-            });
-        });
-
-        let slideInterval = setInterval(nextSlide, 5000);
-
-        const hero = document.querySelector('.hero-content');
-        if (hero) {
-            hero.addEventListener('mouseenter', () => {
-                clearInterval(slideInterval);
-            });
-            hero.addEventListener('mouseleave', () => {
-                slideInterval = setInterval(nextSlide, 5000);
-            });
-        }
-
-        // Markdown Loader
-        const markdownContainer = document.getElementById('dynamic-markdown');
-        const MARKDOWN_FILE_PATH = 'engine_details.md';
-
-        async function loadMarkdownFromFile() {
-            try {
-                const response = await fetch(MARKDOWN_FILE_PATH);
-                if (!response.ok) {
-                    throw new Error(`Markdown file not found: ${MARKDOWN_FILE_PATH}`);
-                }
-                const markdownText = await response.text();
-                if (typeof marked !== 'undefined') {
-                    const htmlContent = await marked.parse(markdownText);
-                    markdownContainer.innerHTML = htmlContent;
-                } else {
-                    markdownContainer.innerHTML = `<pre>${escapeHtml(markdownText)}</pre>`;
-                }
-            } catch (error) {
-                markdownContainer.innerHTML = `
-                    <div class="markdown-error">
-                        ⚠️ Markdown file "${MARKDOWN_FILE_PATH}" not found.<br/>
-                        Please create this file in the same directory as this HTML file.
-                    </div>
-                    <div style="margin-top: 20px;">
-                        <h3>📝 Example content for engine_details.md:</h3>
-                        <pre><code># OYNAME Engine Features
-
-## Core Capabilities
-- **Cross-platform** rendering
-- **Modern C++20** codebase
-- **Hot-reload** for shaders and assets
-- **Built-in physics** engine
-
-## Getting Started
-Check the documentation for quick setup guides.
-
-## Performance
-The engine is optimized for real-time applications with minimal overhead.</code></pre>
-                    </div>
-                `;
-            }
-        }
-        
-        function escapeHtml(str) {
-            return str.replace(/[&<>]/g, function(m) {
-                if (m === '&') return '&amp;';
-                if (m === '<') return '&lt;';
-                if (m === '>') return '&gt;';
-                return m;
-            });
-        }
-        
-        loadMarkdownFromFile();
+        initSlider();
+        loadAllExamples();
     </script>
 </body>
 </html>
