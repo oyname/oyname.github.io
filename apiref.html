@@ -658,10 +658,9 @@ async function init() {
         const hash = window.location.hash.slice(1);
         if (hash) {
             const entry = indexData.find(e => e.name === hash);
-            if (entry) {
-                loadEntry(entry.name, entry.file);
-                return;
-            }
+            if (entry) loadEntry(entry.name, entry.file);
+        } else {
+            loadDefault();
         }
 
     } catch (err) {
