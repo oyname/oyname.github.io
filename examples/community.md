@@ -6,6 +6,6 @@ OYNAME Engine is in active development—questions, feedback, ideas, and bug rep
 Discussions: Questions, ideas, feedback, technical exchange, sharing projects
 Issues: Bugs, crashes, specific improvements
 
-For general discussion and exchange, please use our Forum at [reference-style link][ref].
+For general discussion and exchange, please use our Forum at [OYNAME2-Engine][ref].
 
-[ref]: https://github.com/oyname/OYNAME2-Engine/discussions "github"
+[ref]: https://github.com/oyname/OYNAME2-Engine/discussions
