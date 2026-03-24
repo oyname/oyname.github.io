@@ -1,5 +1,5 @@
 ---
-title: DirectX Adapter Enumeration
+title: OYNAME Engine Forum
 ---
 OYNAME Engine is in active development—questions, feedback, ideas, and bug reports are all welcome.
 
