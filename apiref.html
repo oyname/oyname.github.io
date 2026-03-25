@@ -643,26 +643,6 @@ document.getElementById('searchInput').addEventListener('input', function() {
         }
     });
 });
-
-async function loadDefault() {
-    const welcome  = document.getElementById('welcomeState');
-    const mdContent = document.getElementById('mdContent');
-    welcome.style.display = 'none';
-    mdContent.style.display = 'block';
-
-    try {
-        const res  = await fetch('news/about.md');   // ← hier beliebige MD-Datei eintragen
-        if (!res.ok) throw new Error('');
-        const md   = await res.text();
-        const html = converter.makeHtml(md);
-        mdContent.innerHTML = `<div class="md-body">${html}</div>`;
-        mdContent.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
-    } catch {
-        // Fallback: welcome screen bleibt
-        welcome.style.display = 'flex';
-        mdContent.style.display = 'none';
-    }
-}
     
 async function loadDefault() {
     const welcome  = document.getElementById('welcomeState');
