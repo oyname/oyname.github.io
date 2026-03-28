@@ -1,11 +1,11 @@
 # LEARN ABOUT LICENSING
 
-## Licensing terms for the OYNAME Engine
+## Licensing terms for the KROM Engine
 
 ### Source Code
 **MPL-2.0**
 
-The OYNAME Engine is released under the Mozilla Public License 2.0. You may use, study, modify, and distribute the engine, including in commercial projects.
+The KROM Engine is released under the Mozilla Public License 2.0. You may use, study, modify, and distribute the engine, including in commercial projects.
 
 The license applies to the engine files published under MPL 2.0 and does not automatically apply to the rest of a project that uses the engine.
 
