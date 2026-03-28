@@ -13,7 +13,7 @@ That makes the architecture easier to understand and easier to evolve. Scene sys
 ## High-Level Structure
 
 ```text
-GDXEngine
+KROMEngine
   -> IGDXRenderer / GDXECSRenderer
       -> ECS Registry + Systems
       -> Frame preparation
@@ -23,7 +23,7 @@ GDXEngine
           -> DX11 / OpenGL / DX12 backend path
 ```
 
-At runtime, `GDXEngine` drives the application loop, `GDXECSRenderer` builds the frame from ECS scene data, and the selected backend executes the prepared work on the graphics API. This keeps the frame flow readable: engine host at the top, renderer logic in the middle, backend execution at the bottom.
+At runtime, `KROMEngine` drives the application loop, `GDXECSRenderer` builds the frame from ECS scene data, and the selected backend executes the prepared work on the graphics API. This keeps the frame flow readable: engine host at the top, renderer logic in the middle, backend execution at the bottom.
 
 ---
 
@@ -32,7 +32,7 @@ At runtime, `GDXEngine` drives the application loop, `GDXECSRenderer` builds the
 The runtime layer owns the application lifecycle. It creates the window, initializes the renderer, processes events and advances the main loop.
 
 ```cpp
-class GDXEngine
+class KROMEngine
 {
 public:
     bool Initialize();
