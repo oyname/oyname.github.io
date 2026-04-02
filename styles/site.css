@@ -27,7 +27,8 @@ body {
 .logo img {
     width: 180px;
     height: 42px;
-    display: block;
+    object-fit: contain;
+    filter: brightness(1) drop-shadow(0 0 10px rgba(0,120,242,0.3));
 }
 
 .nav-links {
