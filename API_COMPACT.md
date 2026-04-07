@@ -319,28 +319,7 @@ That is the basic path from engine startup to first image.
 
 ---
 
-## 13. When to Use the Direct Path
-
-Use the direct path when you want:
-
-- explicit control over setup
-- direct access to engine objects
-- custom scene creation
-- real engine integration
-- full control over the runtime loop
-
-Use the simplified path when you want:
-
-- less setup code
-- quick tests
-- samples
-- easier onboarding
-
-For actual engine work, the direct path is the one that matters.
-
----
-
-## 14. Summary
+## 13. Summary
 
 The practical usage path is:
 
