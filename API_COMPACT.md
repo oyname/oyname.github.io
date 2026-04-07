@@ -13,56 +13,17 @@ For exact types, methods, fields, and function behavior, see the API Reference.
 The following diagram shows the practical user-facing path from initialization to the per-frame loop.
 
 ```text
-+-------------------------------+
-| Initialize PlatformRenderLoop |
-+-------------------------------+
-               |
-               v
-+-------------------+
-| Create ecs::World |
-+-------------------+
-               |
-               v
-+--------------+
-| Create Scene |
-+--------------+
-               |
-               v
-+-----------------------+
-| Create MaterialSystem |
-+-----------------------+
-               |
-               v
-+----------------------+
-| Configure RenderView |
-+----------------------+
-               |
-               v
-+---------------+
-| Create Camera |
-+---------------+
-               |
-               v
-+----------------------------+
-| Create Renderable Entities |
-+----------------------------+
-               |
-               v
-+------------------+
-| Update ECS State |
-+------------------+
-               |
-               v
-+-------------------------------------------+
-| loop.Tick(world, materials, view, timing) |
-+-------------------------------------------+
-               |
-               +-------------------+
-                                   |
-                                   v
-                        +------------------+
-                        | Update ECS State |
-                        +------------------+
+Initialize PlatformRenderLoop
+  -> Create ecs::World
+      -> Create Scene
+          -> Create MaterialSystem
+              -> Configure RenderView
+                  -> Create Camera
+                      -> Create Renderable Entities
+                          -> Update ECS State
+                              -> loop.Tick(world, materials, view, timing)
+                                  -> Update ECS State
+                                  -> loop.Tick(...)
 ```
 
 The short version is:
@@ -398,3 +359,4 @@ The important point is simple:
 
 You do not work in an immediate-mode rendering style.  
 You create and update world data, and the engine renders that world for you.
+
