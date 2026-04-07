@@ -652,7 +652,7 @@ async function loadDefault() {
     mdContent.style.display = 'block';
 
     try {
-        const res = await fetch('news/start.md');
+        const res = await fetch('news/apireferencenews.md');
 
         if (!res.ok) {
             throw new Error(`HTTP ${res.status} - ${res.statusText}`);
@@ -662,7 +662,7 @@ async function loadDefault() {
         const html = marked.parse(md, { renderer: customRenderer });
 
         mdContent.innerHTML = `
-            <div class="breadcrumb">API Reference › <span>News</span></div>
+            <div class="breadcrumb">API Reference › <span> </span></div>
             <div class="md">${html}</div>
         `;
 
