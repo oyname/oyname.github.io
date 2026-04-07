@@ -17,53 +17,27 @@ This gives the engine a stable and understandable architecture. Scene code can e
 The following diagram shows the internal structure of the engine from the runtime layer down to backend execution.
 
 ```text
-+----------------------+
-|  PlatformRenderLoop  |
-+----------------------+
-           |
-           v
-+----------------------+
-|     RenderSystem     |
-+----------------------+
-   |        |       |        |         |
-   |        |       |        |         +------------------+
-   |        |       |        |                            |
-   |        |       |        +--> +------------------+    |
-   |        |       |             |  PipelineCache   |    |
-   |        |       |             +------------------+    |
-   |        |       |                                    |
-   |        |       +--> +------------------+            |
-   |        |            | MaterialSystem   |            |
-   |        |            +------------------+            |
-   |        |                                         +----------------------+
-   |        +--> +------------------+                 | RenderFrameOrchestr. |
-   |             | GpuResourceRuntime|                +----------------------+
-   |             +------------------+                          |
-   |                                                           v
-   +--> +------------------+                     +--------------------------+
-        |  ShaderRuntime   |                     |       Frame Stages       |
-        +------------------+                     |--------------------------|
-                                                 | FrameExtractionStage     |
-+----------------------+                         | FramePreparationStage    |
-|   FeatureRegistry    |                         | FrameGraphStage          |
-+----------------------+                         | FrameExecutionStage      |
-                                                 +--------------------------+
-                                                              |
-                                                              v
-+----------------------+     +----------------------+   +----------------------+
-|      ecs::World      | --> |    SceneSnapshot     |-> |    ECSExtractor      |
-+----------------------+     +----------------------+   +----------------------+
-          |                                                      |
-          v                                                      v
-+----------------------+                                +----------------------+
-|        Scene         |                                |     RenderWorld      |
-+----------------------+                                +----------------------+
-                                                                      |
-                                                                      v
-                                             +---------------------------------------------+
-                                             | Backend Interfaces                           |
-                                             | IDevice / ISwapchain / ICommandList / IFence |
-                                             +---------------------------------------------+
+PlatformRenderLoop
+  -> RenderSystem
+      -> RenderFrameOrchestrator
+          -> FrameExtractionStage
+          -> FramePreparationStage
+          -> FrameGraphStage
+          -> FrameExecutionStage
+      -> FeatureRegistry
+      -> ShaderRuntime
+      -> GpuResourceRuntime
+      -> MaterialSystem
+      -> PipelineCache
+      -> ecs::World / Scene
+          -> SceneSnapshot
+          -> ECSExtractor
+          -> RenderWorld
+      -> Backend Interfaces
+          -> IDevice
+          -> ISwapchain
+          -> ICommandList
+          -> IFence
 ```
 
 ---
@@ -321,34 +295,15 @@ This is exactly the kind of boundary a renderer needs. It keeps rendering determ
 The next diagram shows how live scene state turns into a rendered frame.
 
 ```text
-+------------+     +---------------+     +--------------+     +-------------+
-| ecs::World | --> | SceneSnapshot | --> | ECSExtractor | --> | RenderWorld |
-+------------+     +---------------+     +--------------+     +-------------+
-                                                                  |
-                                                                  v
-                                                           +-------------+
-                                                           | RenderQueue |
-                                                           +-------------+
-                                                                  |
-                                                                  v
-                                                     +------------------------+
-                                                     | RenderGraph / Pipeline |
-                                                     +------------------------+
-                                                                  |
-                                                                  v
-                                                     +------------------------+
-                                                     | FrameExecutionStage    |
-                                                     +------------------------+
-                                                                  |
-                                                                  v
-                                            +-----------------------------------------------+
-                                            | IDevice / ICommandList / ISwapchain / Present |
-                                            +-----------------------------------------------+
-                                                                  |
-                                                                  v
-                                                         +----------------+
-                                                         | Final Image    |
-                                                         +----------------+
+ecs::World / Scene
+  -> SceneSnapshot
+      -> ECSExtractor
+          -> RenderWorld
+              -> RenderQueue
+                  -> RenderGraph / FramePipeline
+                      -> FrameExecutionStage
+                          -> IDevice / ICommandList / ISwapchain
+                              -> Final Image
 ```
 
 The mental model is simple:
@@ -626,3 +581,4 @@ That gives the engine a stable shape.
 The important point is not just that the engine is modular. It is that the boundaries are placed in the right places: runtime is separate from rendering, rendering is separate from live scene state, and backend execution is separate from frame preparation.
 
 That is why the architecture remains understandable and extensible even as the renderer becomes more capable.
+
