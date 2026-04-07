@@ -1,283 +1,349 @@
 # KROM ENGINE API OVERVIEW
 
-This document provides a high-level overview of the KROM ENGINE API.
+This document provides a high-level overview of how to use the KROM ENGINE API.
 
-It explains the actual engine path, the main runtime layers, and the minimal concepts required to get a scene on screen.
+It focuses on the practical engine path, the main objects you interact with, and the minimal steps required to get a scene on screen.
 
-This document is intentionally architectural and usage-oriented.
+This document is intentionally usage-oriented.  
+For architectural structure, see the Architecture document.  
 For exact types, methods, fields, and function behavior, see the API Reference.
+
+## Practical Usage Flow
+
+The following diagram shows the practical user-facing path from initialization to the per-frame loop.
+
+![KROM Engine Practical Usage Flow](krom_usage_flow.svg)
+
+The short version is:
+
+1. initialize the runtime
+2. create the ECS world and scene
+3. set up materials and the active view
+4. create camera and scene entities
+5. update ECS state and call `Tick(...)` every frame
 
 ---
 
 ## 1. Purpose
 
-The engine can be used in two ways:
+This document answers one practical question:
+
+**How do you use the engine to create a window, set up rendering, build a scene, and run frames?**
+
+KROM can be approached in two ways:
 
 1. **Direct engine path**
-   - explicit access to window creation
-   - DX11 device/context creation
-   - render backend
-   - ECS renderer
-   - ECS registry
-   - resource creation
+   - explicit setup of platform, window and renderer
+   - direct access to ECS world, scene data and rendering flow
+   - intended for real engine usage, custom setup and advanced work
 
-2. **Simplified path through `gidx.h`**
+2. **Simplified entry path**
    - wraps common setup steps
-   - intended for quick demos and easier onboarding
+   - reduces boilerplate
+   - intended for quick demos and onboarding
 
-This overview focuses on the **direct engine path**, because that is the actual engine structure.
-
----
-
-## 2. Main Runtime Layers
-
-The engine is split into several layers.
-
-### `GIDXEngine`
-Top-level runtime loop.
-Responsible for:
-- frame execution
-- delta time
-- event processing
-- coordinating window and renderer
-
-### `IGDXWindow` / `GDXWin32Window`
-Platform window layer.
-Responsible for:
-- creating the OS window
-- polling messages/events
-- exposing native handles for graphics setup
-
-### DX11 Context Layer
-Responsible for:
-- enumerating adapters
-- selecting a GPU
-- creating the DX11 device/swap chain context
-
-### `IGDXRenderBackend` / `GDXDX11RenderBackend`
-Graphics backend layer.
-Responsible for wrapping the graphics context into an engine backend.
-
-### `GDXECSRenderer`
-Main renderer/runtime API.
-Responsible for:
-- renderer lifecycle
-- ECS access
-- shader, mesh, material, and texture creation
-- frame rendering
-- render targets and post-processing
-
-### `Registry`
-Central ECS storage.
-Responsible for:
-- entities
-- components
-- iteration over component sets
-
-### Resource Stores
-Handle-based storage for:
-- meshes
-- materials
-- shaders
-- textures
-- render targets
-- post-process resources
+This overview focuses on the **direct engine path**, because that is the path you use when working with the engine itself.
 
 ---
 
-## 3. Typical Startup Path
+## 2. The Main Objects You Use
 
-Typical direct usage path:
+When using the engine directly, you mainly interact with a small set of runtime objects.
 
-1. create `GDXEventQueue`
-2. create `WindowDesc`
-3. create `GDXWin32Window`
-4. enumerate DX11 adapters
-5. create DX11 context with `GDXWin32DX11ContextFactory`
-6. create `GDXDX11RenderBackend`
-7. create `GDXECSRenderer`
-8. create `GIDXEngine`
-9. call `Initialize()`
-10. create camera, mesh/material, and renderable entities
-11. run with `Run()` or `Step()`
+### `PlatformRenderLoop`
 
----
+This is the outer runtime entry point.
 
-## 4. Runtime Flow
+You use it to:
 
-At runtime, the engine typically does the following each frame:
+- initialize the runtime
+- connect the platform and window
+- run one frame at a time
+- shut the runtime down cleanly
 
-1. reset per-frame input state
-2. poll window events
-3. process queued events
-4. update timing
-5. begin render frame
-6. execute update/tick logic
-7. end frame and present
+### `ecs::World`
 
-`Run()` executes this continuously.
-`Step()` executes exactly one frame.
+This is the core scene data container.
 
----
+You use it to:
 
-## 5. Events and Input
+- create entities
+- add components
+- query scene data
+- store the actual world state
 
-The platform window writes events into the event queue.
-The engine consumes them once per frame.
+### `Scene`
 
-Important built-in behavior:
-- `Escape` is already handled by the engine
-- pressing ESC triggers application shutdown behavior
+This is the higher-level scene helper built on top of the ECS world.
 
-Input is exposed as frame-based keyboard state:
-- key held
-- key pressed this frame
-- key released this frame
+You use it to:
 
----
+- create named entities
+- build hierarchies
+- manage parent-child relationships
+- propagate transforms
 
-## 6. Rendering Model
+### `MaterialSystem`
 
-The engine is not built around immediate-mode draw calls.
-Visible objects are created through the normal engine resource and ECS flow:
+This manages material-side data used by rendering.
 
-- create mesh data
-- upload mesh resource
-- create material resource
-- create entity
-- attach renderable and visibility-related components
+You use it to:
 
-This means even a first triangle is a normal mesh/material/entity case.
+- create or register material state
+- provide material data used by renderable entities
+
+### `RenderView`
+
+This describes the active view used for rendering.
+
+You use it to:
+
+- define which camera or view settings are active
+- control what the renderer should render from
 
 ---
 
-## 7. ECS Model
+## 3. Basic Usage Flow
 
-The engine uses ECS for scene representation.
+The direct usage flow is simple in principle:
 
-Typical scene objects are entities with components such as:
-- transform
-- world transform
-- renderable state
-- visibility state
-- bounds
-- camera
-- light
+1. create the platform and window setup
+2. initialize `PlatformRenderLoop`
+3. create the ECS world
+4. create scene entities
+5. create or assign materials
+6. configure the active render view
+7. call `Tick(...)` every frame
+8. shut the runtime down when finished
 
-Rendering is driven by ECS data plus handle-based resource references.
-
-Resources are not stored directly in components.
-Components store typed handles to resources managed by the renderer.
+That is the practical engine path.
 
 ---
 
-## 8. Minimal Requirements for a Visible Scene
+## 4. Typical Startup Path
 
-For a visible renderable object, you typically need:
+A typical startup sequence looks like this:
 
-- `TransformComponent`
-- `WorldTransformComponent`
-- `RenderableComponent`
-- `VisibilityComponent`
-- `RenderBoundsComponent`
+1. define a window description
+2. initialize the runtime loop
+3. create `ecs::World`
+4. create `Scene`
+5. create `MaterialSystem`
+6. configure `RenderView`
+7. create camera and scene entities
+8. start the application loop
+9. call `Tick(...)` every frame
 
-For the active main camera, you typically need:
+In short:
 
-- `TransformComponent`
-- `WorldTransformComponent`
-- `CameraComponent`
-- `ActiveCameraTag`
-
-If this baseline is incomplete, nothing will render.
+- initialize runtime first
+- build scene second
+- run frames last
 
 ---
 
-## 9. Minimal Initialization Example
+## 5. Minimal Initialization Example
 
-Minimal direct initialization flow:
+A minimal direct initialization flow looks like this:
 
 ```cpp
-GDXEventQueue events;
+platform::WindowDesc windowDesc{};
+PlatformRenderLoop loop;
 
-WindowDesc desc{};
-auto window = std::make_unique<GDXWin32Window>(desc, events);
-window->Create();
+loop.Initialize(backendType, platform, windowDesc);
 
-auto adapters = GDXWin32DX11ContextFactory::EnumerateAdapters();
-unsigned int bestAdapter = GDXWin32DX11ContextFactory::FindBestAdapter(adapters);
+ecs::World world;
+Scene scene(world);
+MaterialSystem materials;
 
-GDXWin32DX11ContextFactory factory;
-auto dxContext = factory.Create(*window, bestAdapter);
+RenderView view{};
+// configure camera or active view state here
 
-auto backend = std::make_unique<GDXDX11RenderBackend>(std::move(dxContext));
-auto renderer = std::make_unique<GDXECSRenderer>(std::move(backend));
+while (running)
+{
+    loop.Tick(world, materials, view, timing);
+}
 
-GIDXEngine engine(std::move(window), std::move(renderer), events);
-engine.Initialize();
-engine.Run();
-engine.Shutdown();
+loop.Shutdown();
 ```
 
-After initialization, typical next steps are:
-- get the `Registry`
+This is the basic pattern you will follow in most applications using the direct path.
+
+---
+
+## 6. Creating Scene Content
+
+Once the runtime is initialized, you create scene content through the ECS world and scene helpers.
+
+Typical steps are:
+
+1. create an entity
+2. add transform data
+3. add render-related components
+4. assign mesh and material references
+5. ensure the object is visible to the active view
+
+In practice, the renderer works from scene state. You do not submit loose draw calls manually. You create entities and resources, and the renderer builds the frame from that data.
+
+---
+
+## 7. Creating a Camera
+
+To render anything visible, you need an active camera or valid render view setup.
+
+Typical camera setup means:
+
 - create a camera entity
-- build and upload a mesh
-- create a material
-- create a renderable entity
+- add transform data
+- add camera-related state
+- make that camera the active view source
+
+If no valid active view exists, the renderer has no meaningful point of view and the scene will not render as expected.
 
 ---
 
-## 10. First Triangle: Conceptual Path
+## 8. Creating a Visible Object
 
-A first triangle is not a special API path.
+A visible object is usually created through normal scene and resource setup.
 
-It follows the normal engine model:
+Typical requirements are:
 
-1. initialize engine and renderer
-2. create an active camera
-3. create CPU mesh data for one triangle
-4. upload the mesh
-5. create a material
-6. create a renderable entity using mesh and material handles
-7. run the frame loop
+- a valid transform
+- renderable state
+- mesh reference
+- material reference
+- visibility-related state
+- valid bounds if required by visibility processing
 
-The important takeaway is:
-the engine is ECS- and resource-driven, not immediate-mode driven.
+This is important:
+
+A first visible object is **not** a special case in the API. It follows the same engine model as every other rendered object.
+
+That means the normal workflow is:
+
+1. create entity
+2. add required components
+3. assign mesh/material data
+4. run the frame
 
 ---
 
-## 11. When to Use `gidx.h`
+## 9. What Happens Per Frame
 
-`gidx.h` provides a simplified layer for:
-- quick demos
-- samples
-- simple tools
-- faster onboarding
+From the user side, one frame usually means one call to:
+
+```cpp
+loop.Tick(world, materials, view, timing);
+```
+
+That single call drives the full renderer frame for the current world state.
+
+From a practical usage perspective, the frame loop normally looks like this:
+
+1. update your game or application state
+2. write changes into ECS components
+3. update camera/view state
+4. call `Tick(...)`
+5. repeat
+
+So the normal user-facing model is:
+
+- update scene state
+- let the renderer consume it
+- render one frame
+
+---
+
+## 10. The Practical Mental Model
+
+The simplest correct way to think about the engine is this:
+
+- `ecs::World` stores the scene
+- `Scene` helps build and organize that scene
+- `MaterialSystem` provides material-side data
+- `RenderView` defines how the scene should be viewed
+- `PlatformRenderLoop` renders the current frame
+
+That is the core usage model.
+
+You are not expected to build a frame manually. You are expected to build scene state and then run the renderer.
+
+---
+
+## 11. Minimal Requirements for Something Visible
+
+To get a visible result on screen, you generally need:
+
+### A working runtime
+
+The platform loop and renderer must initialize successfully.
+
+### A valid active view
+
+The renderer needs a valid camera or view configuration.
+
+### A renderable scene object
+
+At least one entity must contain the data required to be treated as visible render content.
+
+If one of those three pieces is missing, you will usually get an empty frame.
+
+---
+
+## 12. First Visible Scene: Practical Path
+
+A first visible scene usually follows this path:
+
+1. initialize the runtime
+2. create the ECS world
+3. create the scene helper
+4. create a camera
+5. create one renderable object
+6. assign its mesh and material
+7. configure the active render view
+8. run the frame loop
+
+That is the basic path from engine startup to first image.
+
+---
+
+## 13. When to Use the Direct Path
 
 Use the direct path when you want:
-- explicit control
-- engine-level understanding
-- custom setup
-- engine extension work
+
+- explicit control over setup
+- direct access to engine objects
+- custom scene creation
+- real engine integration
+- full control over the runtime loop
+
+Use the simplified path when you want:
+
+- less setup code
+- quick tests
+- samples
+- easier onboarding
+
+For actual engine work, the direct path is the one that matters.
 
 ---
 
-## 12. Summary
+## 14. Summary
 
-The direct engine path is:
+The practical usage path is:
 
-1. create a window
-2. create a DX11 context
-3. create a backend
-4. create the ECS renderer
-5. create and initialize the engine
-6. create ECS entities and resources
-7. run the frame loop
+1. initialize `PlatformRenderLoop`
+2. create `ecs::World`
+3. create `Scene`
+4. create `MaterialSystem`
+5. configure `RenderView`
+6. create camera and scene entities
+7. call `Tick(...)` every frame
+8. shut down cleanly when done
 
-The core design is:
-- explicit initialization
-- DX11-backed rendering
-- ECS-based scene structure
-- handle-based resources
-- renderer-driven resource creation
+The important point is simple:
 
+**You use KROM by building scene state and running the frame loop.**
+
+You do not work in an immediate-mode rendering style.  
+You create and update world data, and the engine renders that world for you.
