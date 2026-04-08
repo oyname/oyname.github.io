@@ -1,6 +1,6 @@
 # Getting Started
 - [Intro](00_getting_started/intro)
-- [Build & Setup](00_getting_started/build.md)
+- [Build & Setup](00_getting_started/build)
 - [Hello Window](00_getting_started/hello_window)
 
 # Core API
