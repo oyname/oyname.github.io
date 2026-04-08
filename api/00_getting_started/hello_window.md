@@ -5,33 +5,39 @@ Create a minimal window with an event loop.
 
 ## Code Example
 ```cpp 
-#include <krom/platform/window.h>
-#include <krom/engine.h>
+#include "platform/GLFWPlatform.hpp"
+// or Win32Platform.hpp
 
-int main() {
-    // Initialize engine
-    krom::Engine engine;
-    
-    // Create window
-    auto window = krom::platform::Window::create({
-        .title = "Hello KROM",
-        .width = 1280,
-        .height = 720,
-        .vsync = true
-    });
-    
-    // Main loop
-    while (window->is_open()) {
-        window->poll_events([](const krom::Event& e) {
-            if (e.type == krom::Event::KeyPressed && 
-                e.key == krom::Key::Escape) {
-                window->close();
-            }
-        });
-        
-        // Insert render logic here
-        engine.frame();
+using namespace engine::platform;
+
+int main()
+{
+    GLFWPlatform platform;
+    if (!platform.Initialize())
+        return -1;
+
+    WindowDesc desc{};
+    desc.title = "Hello KROM";
+    desc.width = 1280;
+    desc.height = 720;
+    desc.resizable = true;
+
+    IWindow* window = platform.CreateWindow(desc);
+    if (!window)
+        return -2;
+
+    IInput* input = platform.GetInput();
+
+    while (!window->ShouldClose())
+    {
+        platform.PumpEvents();
+
+        if (input && input->IsKeyPressed(Key::Escape))
+            window->RequestClose();
+
+        // render logic
     }
-    
+
+    platform.Shutdown();
     return 0;
 }
