@@ -36,4 +36,4 @@
 - [Custom AddOns](06_advanced/custom_addons)
 
 # Shader
-- [Shader System](07 shader/shader)
+- [Shader](07_shader/shader)
