@@ -1,6 +1,6 @@
 # LEARN ABOUT LICENSING
 
-## Licensing terms for the KROM Engine
+## Licensing terms for the KROM Engine (Version 0.7)
 
 ### Source Code
 **MPL-2.0**
@@ -14,7 +14,7 @@ If you modify MPL-licensed engine files and distribute those modified files, tho
 ### Attribution
 **Optional**
 
-Referencing the OYNAME Engine in your project is not required. A voluntary mention in the credits, documentation, or project page is appreciated, but it is not a condition of the license.
+Referencing the KROM Engine in your project is not required. A voluntary mention in the credits, documentation, or project page is appreciated, but it is not a condition of the license.
 
 ### Warranty and Liability
 
