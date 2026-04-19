@@ -1,0 +1,11 @@
+---
+title: 2026-04-19  Release Notes — Architecture and Rendering Overhaul
+---
+- Expanded and better structured the addon architecture
+- Cleaned up renderer core internals and clarified responsibilities
+- Removed legacy material paths and unnecessary alias indirections
+- Introduced a centralized core shader pipeline
+- Simplified and refined frame, pipeline, and build contracts
+- Improved backend separation across DX11, DX12, Vulkan, and OpenGL
+- Established HLSL as the primary path for modern backends
+- Kept OpenGL 4.1 as an isolated legacy path for macOS
