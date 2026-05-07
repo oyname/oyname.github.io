@@ -10,6 +10,7 @@ AddOns are the approved extension mechanism for:
 
 - rendering backends
 - render features and pipelines
+- ECS components and serialization
 - material/model helpers
 - backend-specific shader reflection
 - optional runtime integrations
@@ -25,10 +26,10 @@ The AddOn system exists to enforce these rules:
 - **Core owns abstractions.**
 - **AddOns own concrete implementations.**
 - **Build dependencies are explicit.**
-- **Registration is explicit or self-registering by design.**
+- **Dependencies are declared, not discovered at runtime.**
 - **No hidden coupling between core and individual AddOns.**
 
-If a module has no isolated build target, no clear public API, and no defined registration path, then it is not a real AddOn.
+If a module has no isolated build target, no clear public API, and no declared dependency contract, then it is not a real AddOn.
 
 ---
 
@@ -156,7 +157,7 @@ target_link_libraries(engine_myaddon PUBLIC engine_core)
 ### Important
 
 `engine_core` must not link any AddOn library — not even as a convenience.
-AddOn libraries belong in `engine_addon_adapters` or in the application target.
+AddOn libraries belong in the application target or a purpose-specific aggregate target.
 Violating this rule creates hidden circular dependencies between core and concrete implementations.
 
 ---
@@ -167,103 +168,204 @@ KROM uses three registration models depending on AddOn type.
 
 ---
 
-### 1. IEngineAddon — lifecycle registration (primary model)
+### 1. IEngineModule — lifecycle registration (primary model)
 
-This is the standard registration model for AddOns that need to participate in engine startup and shutdown.
+This is the standard registration model for AddOns that need to participate in engine startup and shutdown, register ECS components, contribute render capabilities, or provide services to other modules.
 
 Relevant engine contract:
 
-- `engine::IEngineAddon` — `include/core/IEngineAddon.hpp`
-- `engine::AddonContext` — `include/core/AddonContext.hpp`
-- `engine::ServiceRegistry` — `include/core/ServiceRegistry.hpp`
-- `engine::AddonManager` — `include/core/AddonManager.hpp`
+- `engine::modules::IEngineModule` — `include/core/ModuleSystem.hpp`
+- `engine::modules::ModuleDescriptor` — `include/core/ModuleSystem.hpp`
+- `engine::modules::ModuleDeclarationContext` — `include/core/ModuleSystem.hpp`
+- `engine::modules::ModuleInitContext` — `include/core/ModuleSystem.hpp`
+- `engine::modules::ModuleShutdownContext` — `include/core/ModuleSystem.hpp`
+- `engine::modules::ModuleCatalog` — `include/core/ModuleSystem.hpp`
+- `engine::modules::ModuleGraph` — `include/core/ModuleSystem.hpp`
+- `engine::modules::ModuleRuntime` — `include/core/ModuleSystem.hpp`
+- `engine::modules::ServiceContainer` — `include/core/ModuleSystem.hpp`
 
-#### AddonContext
-
-`AddonContext` is passed to `Register()` and `Unregister()`. It exposes only stable core services:
+#### IEngineModule interface
 
 ```cpp
-struct AddonContext
+class IEngineModule
 {
-    ILogger&         Logger;
-    events::EventBus& EventBus;
-    ServiceRegistry& Services;
-    void*            Config    = nullptr;
-    void*            Allocator = nullptr;
+public:
+    virtual ~IEngineModule() = default;
+
+    [[nodiscard]] virtual ModuleDescriptor Describe() const noexcept = 0;
+    virtual void DeclareContributions(ModuleDeclarationContext& ctx) const = 0;
+    virtual bool Initialize(ModuleInitContext& ctx) = 0;
+    virtual void Shutdown(ModuleShutdownContext& ctx) noexcept = 0;
 };
 ```
 
-AddOns must not assume any service is present. Use `Services.TryGet<T>()` for optional services and `Services.Has<T>()` for guards.
+The four methods map to four distinct phases. Their invariants are strict:
 
-#### ServiceRegistry
+| Method | Phase | Side effects allowed |
+|---|---|---|
+| `Describe()` | metadata | none — must be side-effect-free and `const` |
+| `DeclareContributions()` | declaration | none — write-only into context, no service access |
+| `Initialize()` | initialization | yes — may access declared services, register runtime state |
+| `Shutdown()` | shutdown | yes — must reverse Initialize() |
 
-Non-owning registry keyed by type. Services must be registered before `RegisterAll()` is called.
-
-```cpp
-services.Register<ecs::ComponentMetaRegistry>(&componentRegistry);
-services.Register<renderer::RenderSystem>(&renderSystem);
-
-auto* rs = ctx.Services.TryGet<renderer::RenderSystem>(); // nullptr if absent
-auto* cm = ctx.Services.Get<ecs::ComponentMetaRegistry>(); // asserts if absent
-bool  ok = ctx.Services.Has<renderer::RenderSystem>();
-```
-
-#### AddonManager
-
-Manages AddOn lifetime. Registers in insertion order, unregisters in reverse order.
+#### ModuleDescriptor
 
 ```cpp
-AddonManager manager;
-manager.AddAddon(std::make_unique<MyAddon>()); // rejected if name is duplicate or empty
-manager.AddAddon(CreateCameraAddon());
-
-AddonContext ctx{ GetDefaultLogger(), eventBus, services };
-manager.RegisterAll(ctx);   // calls Register() forward; rolls back on failure
-// ...
-manager.UnregisterAll(ctx); // calls Unregister() in reverse
-manager.Reset();            // clears all entries
+struct ModuleDescriptor
+{
+    std::string_view              name{};
+    RawModuleId                   id{};
+    std::span<const RawModuleId>  requiredModules{};
+    std::span<const RawModuleId>  optionalModules{};
+    std::span<const RawServiceId> requiredServices{};
+    std::span<const RawServiceId> optionalServices{};
+};
 ```
 
-If `Register()` fails, `UnregisterAll()` is called immediately including the failing AddOn, so partial teardown is attempted.
+All dependency declarations use `std::string_view` / `std::span` over static storage. The engine interns them at catalog-add time — no ownership required from the module.
 
-#### IEngineAddon pattern
+#### ServiceContainer
+
+Typed, tier-separated service registry. Has no `TryGet` or free lookup.
+Modules may only access services they declared in `Describe()`.
+
+```cpp
+// Tier-0: registered by the engine before any module loads
+services.RegisterCore<ecs::ComponentMetaRegistry>("engine.component_registry", componentRegistry);
+services.RegisterCore<renderer::RenderSystem>("engine.render_system",           renderSystem);
+
+// In Initialize(): declared-required service
+auto& components = ctx.GetRequired<ecs::ComponentMetaRegistry>();  // via ServiceTraits
+
+// In Initialize(): declared-optional service
+auto* debug = ctx.GetOptional<IDebugOverlay>();                    // nullptr if absent
+```
+
+`GetRequired` throws if the service is missing or has a type mismatch.
+`GetOptional` returns `nullptr` if absent, throws on type mismatch.
+Accessing a service that was not declared in `Describe()` throws unconditionally.
+
+#### ServiceTraits
+
+To use the type-based lookup form (`GetRequired<T>()` without an explicit ID), define a specialization:
+
+```cpp
+template<>
+struct engine::modules::ServiceTraits<ecs::ComponentMetaRegistry>
+{
+    static constexpr auto kId = "engine.component_registry";
+};
+```
+
+Core engine services have `ServiceTraits` defined in their headers. Third-party services without traits must be accessed via the explicit `GetRequired<T>(ServiceId)` overload.
+
+#### Service tiers
+
+| Tier | Who registers | When available |
+|---|---|---|
+| Core (`ServiceTier::Core`) | `EngineRuntime` before module graph | before any module loads |
+| Module (`ServiceTier::Module`) | module in `Initialize()` via `ctx.RegisterProvidedService()` | after the providing module initializes |
+
+A module-provided service is only available to modules that declared it as a dependency. Core services cannot be shadowed by modules.
+
+#### IEngineModule pattern
 
 ```cpp
 #pragma once
-#include "core/IEngineAddon.hpp"
+#include "core/ModuleSystem.hpp"
 
-class MyAddon final : public engine::IEngineAddon
+class MyLifecycleModule final : public engine::modules::IEngineModule
 {
 public:
-    [[nodiscard]] const char*      Name()    const noexcept override { return "MyAddon"; }
-    [[nodiscard]] std::string_view Version() const noexcept override { return "1.0.0"; }
-
-    bool Register(engine::AddonContext& ctx) override
+    [[nodiscard]] engine::modules::ModuleDescriptor Describe() const noexcept override
     {
-        // Query services — never assume they are present.
-        auto* components = ctx.Services.TryGet<engine::ecs::ComponentMetaRegistry>();
-        if (!components)
-        {
-            ctx.Logger.Error("MyAddon requires ComponentMetaRegistry");
-            return false;
-        }
-        engine::ecs::RegisterComponent<MyComponent>(*components, "MyComponent");
+        static const engine::modules::RawServiceId kRequired[] = {
+            "engine.component_registry",
+            "engine.scene_serializer",
+        };
+        static const engine::modules::RawServiceId kOptional[] = {
+            "engine.scene_deserializer",
+        };
+        return {
+            .name             = "addon.mylifecycle",
+            .id               = "addon.mylifecycle",
+            .requiredServices = kRequired,
+            .optionalServices = kOptional,
+        };
+    }
+
+    void DeclareContributions(engine::modules::ModuleDeclarationContext& ctx) const override
+    {
+        // No contributions for a lifecycle-only module.
+        (void)ctx;
+    }
+
+    bool Initialize(engine::modules::ModuleInitContext& ctx) override
+    {
+        auto& components  = ctx.GetRequired<ecs::ComponentMetaRegistry>();
+        auto& serializer  = ctx.GetRequired<serialization::SceneSerializer>();
+        auto* deserializer = ctx.GetOptional<serialization::SceneDeserializer>();
+
+        engine::ecs::RegisterComponent<MyComponent>(components, "MyComponent");
+        RegisterMySerializationHandlers(serializer);
+        if (deserializer)
+            RegisterMyDeserializationHandlers(*deserializer);
+
         return true;
     }
 
-    void Unregister(engine::AddonContext& ctx) override
+    void Shutdown(engine::modules::ModuleShutdownContext& ctx) noexcept override
     {
-        if (auto* components = ctx.Services.TryGet<engine::ecs::ComponentMetaRegistry>())
-            components->Unregister<MyComponent>();
+        // Reverse Initialize() in reverse order.
+        if (auto* deserializer = ctx.GetOptional<serialization::SceneDeserializer>(...))
+            UnregisterMyDeserializationHandlers(*deserializer);
+        // serializer and components cleaned up analogously
     }
 };
 ```
+
+#### Bootstrap
+
+```cpp
+// 1. Register Tier-0 services.
+engine::modules::ServiceContainer services;
+services.RegisterCore<ecs::ComponentMetaRegistry>("engine.component_registry", componentRegistry);
+services.RegisterCore<serialization::SceneSerializer>("engine.scene_serializer", sceneSerializer);
+services.RegisterCore<serialization::SceneDeserializer>("engine.scene_deserializer", sceneDeserializer);
+
+// 2. Add modules to catalog.
+engine::modules::ModuleCatalog catalog;
+catalog.AddModule(std::make_unique<MyLifecycleModule>());
+
+// 3. Declare contributions (side-effect-free).
+if (!catalog.DeclareAll())
+{ /* handle catalog.GetLastError() */ }
+
+// 4. Build and validate dependency graph.
+engine::modules::ModuleGraph graph;
+if (!graph.Build(catalog, services.DescribeServices()))
+{ /* handle graph.GetLastError() */ }
+
+// 5. Initialize in topological order.
+engine::modules::ModuleRuntime runtime;
+if (!runtime.InitializeAll(catalog, graph, services))
+{ /* handle runtime.GetLastError() */ }
+
+// ... run ...
+
+// 6. Shutdown in reverse topological order.
+runtime.ShutdownAll(catalog, services);
+```
+
+If `Build()` fails, no module has been initialized — no rollback needed.
+If `InitializeAll()` fails, already-initialized modules are shut down automatically in reverse order.
 
 ---
 
 ### 2. Backend self-registration
 
 Backend AddOns register themselves through `DeviceFactory::Registrar`.
+This model is unchanged.
 
 Relevant engine contract:
 
@@ -308,7 +410,7 @@ DeviceFactory::Registrar g_myBackendRegistrar(
 
 ### 3. Feature registration
 
-Feature AddOns expose `IEngineFeature` implementations. In practice these are always wrapped in an `IEngineAddon` adapter. Direct registration outside an adapter is only for test and tooling code.
+Feature AddOns expose `IEngineFeature` implementations and register them directly with the render system. No adapter layer is needed.
 
 Relevant engine contract:
 
@@ -371,36 +473,69 @@ std::unique_ptr<IEngineFeature> CreateMyFeature()
 } // namespace engine::renderer::addons::myfeature
 ```
 
+Direct registration from app or example code:
+
+```cpp
+renderer::RenderSystem& renderSystem = m_renderLoop.GetRenderSystem();
+renderSystem.RegisterFeature(addons::mesh_renderer::CreateMeshRendererFeature());
+renderSystem.RegisterFeature(addons::lighting::CreateLightingFeature());
+renderSystem.RegisterFeature(addons::shadow::CreateShadowFeature());
+renderSystem.RegisterFeature(renderer::addons::forward::CreateForwardFeature(forwardConfig));
+```
+
 #### Feature registration rules
 
 - feature IDs must be stable and unique
 - dependencies must be declared through `GetDependencies()` when needed
 - `Register(...)` must only register feature-owned pipeline and extraction objects
-- `Initialize(...)` must not assume unrelated AddOns are present unless declared as dependencies
+- `Initialize(...)` must not assume unrelated features are present unless declared as dependencies
 - `Shutdown(...)` must leave no persistent registration or dangling ownership behind
 
 ---
 
-## Combined AddOn Entry Points
+## Contributions
 
-When an AddOn registers both ECS components and serialization handlers, it must expose a combined entry point pair so that adapters and callers do not need to know the internal breakdown.
+Modules may contribute typed objects to engine subsystems by declaring them in `DeclareContributions()`.
+Contributions are type-erased at declaration time and instantiated on demand through `ContributionRegistry<T>`.
 
-Convention:
+### Declaring a contribution
 
 ```cpp
-// In the AddOn's serialization header:
-void RegisterMyAddon(ecs::ComponentMetaRegistry* components,
-                     serialization::SceneSerializer* serializer,
-                     serialization::SceneDeserializer* deserializer);
-
-void UnregisterMyAddon(ecs::ComponentMetaRegistry* components,
-                       serialization::SceneSerializer* serializer,
-                       serialization::SceneDeserializer* deserializer);
+void DeclareContributions(engine::modules::ModuleDeclarationContext& ctx) const override
+{
+    ctx.ContributeCapability<IMyCapability>({
+        .name    = "addon.mymodule.capability",
+        .factory = []() -> std::unique_ptr<IMyCapability> {
+            return std::make_unique<MyCapabilityImpl>();
+        }
+    });
+}
 ```
 
-All parameters are pointers. A null value means the service is not available — the function silently skips that step. Unregister must mirror Register in reverse order (deserializer, serializer, components).
+- `DeclareContributions()` is `const` — no side effects, no service access.
+- The factory is called later during initialization, not at declaration time.
+- The type is bound at registration, not at instantiation. Type mismatches throw at `Instantiate()`.
 
-This is the only function an `IEngineAddon` adapter needs to call for lifecycle setup beyond the render feature factory.
+### Consuming contributions
+
+After `DeclareAll()`, any subsystem or runtime can collect contributions by type:
+
+```cpp
+engine::modules::ContributionRegistry<IMyCapability> registry(catalog);
+
+// Inspect declarations without instantiation:
+for (size_t i = 0; i < registry.Size(); ++i)
+    std::cout << registry.Declaration(i).name.View() << "\n";
+
+// Instantiate all at once:
+auto instances = registry.InstantiateAll();
+
+// Instantiate individually:
+auto instance = registry.Instantiate(0);
+```
+
+`ContributionRegistry<T>` queries the catalog at construction and holds non-owning pointers.
+It must not outlive the `ModuleCatalog` it was built from.
 
 ---
 
@@ -412,6 +547,7 @@ They may contribute:
 
 - scene extraction steps via `ISceneExtractionStep`
 - render pipelines via `IRenderPipeline`
+- frame constants via `IFrameConstantsContributor`
 
 ### Scene extraction step contract
 
@@ -421,10 +557,9 @@ class MyExtractionStep final : public ISceneExtractionStep
 public:
     std::string_view GetName() const noexcept override { return "myfeature.extract"; }
 
-    void Extract(const ecs::World& world, RenderWorld& renderWorld) const override
+    void Extract(const SceneExtractionContext& ctx) const override
     {
-        (void)world;
-        (void)renderWorld;
+        (void)ctx;
     }
 };
 ```
@@ -478,16 +613,14 @@ An application must explicitly link the AddOns it uses.
 ```cmake
 target_link_libraries(my_app PRIVATE
     engine_core
-    engine_addon_adapters
     engine_forward
     engine_pbr
     engine_platform_win32
 )
 ```
 
-`engine_addon_adapters` transitively exposes `engine_camera`, `engine_lighting`, `engine_mesh_renderer`, `engine_particles`, and `engine_shadow`. Applications that use these do not need to list them separately as long as they link `engine_addon_adapters`.
-
-If an application directly includes AddOn headers that are not covered transitively, it must add an explicit link.
+There is no aggregate adapter library. Each AddOn is linked directly.
+If an application includes AddOn headers, it must link the corresponding target.
 
 ---
 
@@ -537,7 +670,7 @@ If an AddOn depends on static initialization for registration, it must be linked
 - material/utility AddOn headers
 - any concrete AddOn-private type
 
-`engine_core` must not list any AddOn library in `target_link_libraries`. This includes `engine_camera`, `engine_lighting`, `engine_mesh_renderer`, and `engine_particles`. Those belong in `engine_addon_adapters`.
+`engine_core` must not list any AddOn library in `target_link_libraries`.
 
 ### AddOns may depend on
 
@@ -562,119 +695,130 @@ If an AddOn depends on static initialization for registration, it must be linked
 | CMake target | `engine_<name>` | `engine_forward` |
 | namespace (renderer features) | `engine::renderer::addons::<name>` | `engine::renderer::addons::forward` |
 | namespace (ECS/lifecycle addons) | `engine::addons::<name>` | `engine::addons::camera` |
-| IEngineAddon name string | short descriptive word | `"Camera"`, `"MeshRenderer"` |
-| IEngineFeature ID string | `krom-<name>` | `krom-forward` |
+| module ID string | `addon.<name>` | `addon.mesh_renderer` |
+| service ID string | `engine.<name>` (core) / `addon.<name>` (module) | `engine.render_system` |
+| `IEngineFeature` ID string | `krom-<name>` | `krom-forward` |
 
 ---
 
-## Minimal IEngineAddon Example
+## Minimal IEngineModule Example
 
-This example shows how to create a complete lifecycle AddOn without a render feature.
+This example shows how to create a complete lifecycle module without a render feature.
 
 ### File layout
 
 ```text
 addons/mylifecycle/
     CMakeLists.txt
+    MyLifecycleComponents.hpp
+    MyLifecycleComponents.cpp
     MyLifecycleSerialization.hpp
     MyLifecycleSerialization.cpp
+    MyLifecycleModule.hpp
+    MyLifecycleModule.cpp
 ```
 
-### Combined entry point header
+### Module header
 
 ```cpp
 #pragma once
+#include "core/ModuleSystem.hpp"
+
+namespace engine::addons::mylifecycle {
+
+class MyLifecycleModule final : public engine::modules::IEngineModule
+{
+public:
+    [[nodiscard]] engine::modules::ModuleDescriptor Describe() const noexcept override;
+    void DeclareContributions(engine::modules::ModuleDeclarationContext& ctx) const override;
+    bool Initialize(engine::modules::ModuleInitContext& ctx) override;
+    void Shutdown(engine::modules::ModuleShutdownContext& ctx) noexcept override;
+};
+
+} // namespace engine::addons::mylifecycle
+```
+
+### Module implementation
+
+```cpp
+#include "MyLifecycleModule.hpp"
+#include "MyLifecycleComponents.hpp"
+#include "MyLifecycleSerialization.hpp"
 #include "ecs/ComponentMeta.hpp"
 #include "serialization/SceneSerializer.hpp"
 
 namespace engine::addons::mylifecycle {
 
-void RegisterMyLifecycleAddon(ecs::ComponentMetaRegistry* components,
-                               serialization::SceneSerializer* serializer,
-                               serialization::SceneDeserializer* deserializer);
-
-void UnregisterMyLifecycleAddon(ecs::ComponentMetaRegistry* components,
-                                 serialization::SceneSerializer* serializer,
-                                 serialization::SceneDeserializer* deserializer);
-
-} // namespace engine::addons::mylifecycle
-```
-
-### Combined entry point implementation
-
-```cpp
-#include "MyLifecycleSerialization.hpp"
-#include "MyLifecycleComponents.hpp"
-
-namespace engine::addons::mylifecycle {
-
-void RegisterMyLifecycleAddon(ecs::ComponentMetaRegistry* components,
-                               serialization::SceneSerializer* serializer,
-                               serialization::SceneDeserializer* deserializer)
+engine::modules::ModuleDescriptor MyLifecycleModule::Describe() const noexcept
 {
-    if (components)  RegisterMyLifecycleComponents(*components);
-    if (serializer)  RegisterMyLifecycleSerializationHandlers(*serializer);
-    if (deserializer) RegisterMyLifecycleDeserializationHandlers(*deserializer);
+    static const engine::modules::RawServiceId kRequired[] = {
+        "engine.component_registry",
+        "engine.scene_serializer",
+    };
+    static const engine::modules::RawServiceId kOptional[] = {
+        "engine.scene_deserializer",
+    };
+    return {
+        .name             = "addon.mylifecycle",
+        .id               = "addon.mylifecycle",
+        .requiredServices = kRequired,
+        .optionalServices = kOptional,
+    };
 }
 
-void UnregisterMyLifecycleAddon(ecs::ComponentMetaRegistry* components,
-                                 serialization::SceneSerializer* serializer,
-                                 serialization::SceneDeserializer* deserializer)
+void MyLifecycleModule::DeclareContributions(engine::modules::ModuleDeclarationContext& ctx) const
 {
+    (void)ctx; // no contributions for this module
+}
+
+bool MyLifecycleModule::Initialize(engine::modules::ModuleInitContext& ctx)
+{
+    auto& components   = ctx.GetRequired<ecs::ComponentMetaRegistry>();
+    auto& serializer   = ctx.GetRequired<serialization::SceneSerializer>();
+    auto* deserializer = ctx.GetOptional<serialization::SceneDeserializer>();
+
+    RegisterMyLifecycleComponents(components);
+    RegisterMyLifecycleSerializationHandlers(serializer);
+    if (deserializer)
+        RegisterMyLifecycleDeserializationHandlers(*deserializer);
+
+    return true;
+}
+
+void MyLifecycleModule::Shutdown(engine::modules::ModuleShutdownContext& ctx) noexcept
+{
+    auto* deserializer = ctx.GetOptional<serialization::SceneDeserializer>(...);
+    auto* serializer   = ctx.GetOptional<serialization::SceneSerializer>(...);
+    auto* components   = ctx.GetOptional<ecs::ComponentMetaRegistry>(...);
+
     if (deserializer) UnregisterMyLifecycleDeserializationHandlers(*deserializer);
-    if (serializer)  UnregisterMyLifecycleSerializationHandlers(*serializer);
-    if (components)  components->Unregister<MyLifecycleComponent>();
+    if (serializer)   UnregisterMyLifecycleSerializationHandlers(*serializer);
+    if (components)   components->Unregister<MyLifecycleComponent>();
 }
 
 } // namespace engine::addons::mylifecycle
-```
-
-### IEngineAddon adapter
-
-```cpp
-class MyLifecycleAddon final : public engine::IEngineAddon
-{
-public:
-    [[nodiscard]] const char* Name() const noexcept override { return "MyLifecycle"; }
-
-    bool Register(engine::AddonContext& ctx) override
-    {
-        if (!ctx.Services.Has<engine::ecs::ComponentMetaRegistry>())
-        {
-            ctx.Logger.Error("MyLifecycleAddon requires ComponentMetaRegistry");
-            return false;
-        }
-        engine::addons::mylifecycle::RegisterMyLifecycleAddon(
-            ctx.Services.TryGet<engine::ecs::ComponentMetaRegistry>(),
-            ctx.Services.TryGet<engine::serialization::SceneSerializer>(),
-            ctx.Services.TryGet<engine::serialization::SceneDeserializer>());
-        return true;
-    }
-
-    void Unregister(engine::AddonContext& ctx) override
-    {
-        engine::addons::mylifecycle::UnregisterMyLifecycleAddon(
-            ctx.Services.TryGet<engine::ecs::ComponentMetaRegistry>(),
-            ctx.Services.TryGet<engine::serialization::SceneSerializer>(),
-            ctx.Services.TryGet<engine::serialization::SceneDeserializer>());
-    }
-};
 ```
 
 ### Bootstrap
 
 ```cpp
-engine::ServiceRegistry services;
-services.Register<engine::ecs::ComponentMetaRegistry>(&componentRegistry);
-// renderer::RenderSystem registered here if render features are needed
+engine::modules::ServiceContainer services;
+services.RegisterCore<ecs::ComponentMetaRegistry>("engine.component_registry", componentRegistry);
+services.RegisterCore<serialization::SceneSerializer>("engine.scene_serializer", sceneSerializer);
+services.RegisterCore<serialization::SceneDeserializer>("engine.scene_deserializer", sceneDeserializer);
 
-engine::AddonManager manager;
-manager.AddAddon(std::make_unique<MyLifecycleAddon>());
+engine::modules::ModuleCatalog catalog;
+catalog.AddModule(std::make_unique<engine::addons::mylifecycle::MyLifecycleModule>());
 
-engine::AddonContext ctx{ engine::GetDefaultLogger(), eventBus, services };
-manager.RegisterAll(ctx);
+catalog.DeclareAll();
+
+engine::modules::ModuleGraph graph;
+graph.Build(catalog, services.DescribeServices());
+
+engine::modules::ModuleRuntime runtime;
+runtime.InitializeAll(catalog, graph, services);
 // ... run ...
-manager.UnregisterAll(ctx);
+runtime.ShutdownAll(catalog, services);
 ```
 
 ---
@@ -788,45 +932,16 @@ std::unique_ptr<IEngineFeature> CreateSampleFeature()
 } // namespace engine::renderer::addons::sample_feature
 ```
 
-### IEngineAddon adapter for a render feature
+### Registration from app code
 
 ```cpp
-class SampleFeatureAddon final : public engine::IEngineAddon
-{
-public:
-    [[nodiscard]] const char* Name() const noexcept override { return "SampleFeature"; }
-
-    bool Register(engine::AddonContext& ctx) override
-    {
-        auto* rs = ctx.Services.TryGet<engine::renderer::RenderSystem>();
-        if (!rs)
-        {
-            ctx.Logger.Error("SampleFeatureAddon requires RenderSystem");
-            return false;
-        }
-        return rs->RegisterFeature(
-            engine::renderer::addons::sample_feature::CreateSampleFeature());
-    }
-
-    void Unregister(engine::AddonContext& ctx) override
-    {
-        // FeatureRegistry::RemoveFeature() not yet available.
-        (void)ctx;
-    }
-};
+renderSystem.RegisterFeature(
+    engine::renderer::addons::sample_feature::CreateSampleFeature());
 ```
 
 ---
 
 ## Known Limitations
-
-### FeatureRegistry has no RemoveFeature
-
-`IEngineFeature` instances registered via `RenderSystem::RegisterFeature()` cannot be removed at runtime.
-`Shutdown(...)` is called on feature shutdown but the feature stays in the registry.
-
-Until `FeatureRegistry::RemoveFeature()` is added, `Unregister()` of render feature adapters is effectively a no-op for the feature itself.
-Component and serialization state can be cleaned up — only the render feature slot persists.
 
 ### ComponentTypeID values are permanent
 
@@ -834,10 +949,14 @@ Component and serialization state can be cleaned up — only the render feature 
 
 ---
 
-## What an AddOn Must Not Do
+## What a Module Must Not Do
 
-An AddOn must not:
+A module must not:
 
+- access services that were not declared in `Describe()`
+- cause side effects in `Describe()` or `DeclareContributions()`
+- read other modules' declarations during `DeclareContributions()`
+- register Tier-0 services — only the engine runtime may do that
 - modify core invariants from the outside
 - require the core to include AddOn-private headers
 - hide registration in unrelated engine code
@@ -857,12 +976,13 @@ Before calling a module an AddOn, verify all of the following:
 - it builds as a dedicated target
 - its CMake target exports `${CMAKE_SOURCE_DIR}` as a PUBLIC include
 - it exposes a clear public API
-- it has a documented registration path (IEngineAddon, backend registrar, or feature factory)
+- it implements `IEngineModule` or uses backend self-registration or direct feature registration
+- all required and optional dependencies are declared in `Describe()`
+- `DeclareContributions()` is side-effect-free and accesses no services
+- `Shutdown()` reverses `Initialize()` in reverse order
 - it does not require core-private hacks
 - `engine_core` does not list it in its own `target_link_libraries`
 - app targets explicitly link it when they use it
-- its ownership and lifecycle are clear
-- `Unregister()` undoes everything `Register()` did, in reverse order
 
 ---
 
@@ -873,12 +993,15 @@ When creating a new AddOn:
 1. Define the AddOn category (backend / feature / utility / lifecycle).
 2. Define the public API surface — prefer narrow headers.
 3. Create the AddOn build target with correct include directories.
-4. Implement the combined entry point (`RegisterXxxAddon` / `UnregisterXxxAddon`) if the AddOn touches components or serialization.
-5. Implement `IEngineAddon` adapter calling the entry point and/or feature factory.
+4. Implement `IEngineModule`:
+   - declare all required and optional services in `Describe()`
+   - declare all contributions in `DeclareContributions()` (side-effect-free)
+   - access only declared services in `Initialize()`
+   - reverse `Initialize()` in `Shutdown()`
+5. If the AddOn provides render features, expose a `CreateXxxFeature()` factory.
 6. Integrate into the root build via `add_subdirectory`.
-7. Add the AddOn to `engine_addon_adapters` if it should be part of the standard engine stack.
-8. Link explicitly from example or app targets.
-9. Verify that no core code now depends on AddOn-private details.
+7. Link explicitly from example or app targets.
+8. Verify that no core code now depends on AddOn-private details.
 
 ---
 
@@ -891,8 +1014,8 @@ A proper AddOn is:
 
 - isolated
 - buildable
-- explicit
-- registerable
-- reversible
+- explicit in its dependencies
+- validated before initialization
+- reversible on shutdown
 
 If those properties are missing, the design has not been finished.
