@@ -133,50 +133,67 @@ This is a null or fallback addon. It is useful for tests, headless scenarios, or
 
 ## The example programs
 
-In the current setup, the project builds two main example applications.
+In the current setup, the project builds three main example applications — one per supported renderer backend. All three are built from the same shared source files.
 
-### `engine_dx11_render_loop`
-
-This is the Direct3D 11 render-loop example.
-
-It is built from:
+### Shared source files
 
 ```text
-examples/dx11_render_loop.cpp
+examples/pbr_shadow_main.cpp
+examples/framework/ExampleApp.cpp
+examples/framework/PbrShadowScene.cpp
+examples/framework/LightingValidationScene.cpp
 ```
 
-It uses:
+### Common dependencies
 
-- `engine_core`
+All example targets share these engine module dependencies:
+
+- `engine_renderer_orchestration_layer`
+- `engine_camera`
 - `engine_forward`
-- `engine_platform_win32`
-- `engine_dx11`
+- `engine_debug_draw`
+- `engine_lighting`
+- `engine_mesh_renderer`
+- `engine_pbr`
+- `engine_shadow`
+
+Plus the platform layer and the backend addon for each target.
 
 ---
 
-### `engine_opengl_render_loop`
+### `krom_pbr_shadow_dx11`
 
-This is the OpenGL render-loop example.
+This is the Direct3D 11 PBR + shadow example.
 
-It is built from:
+It uses:
 
-```text
-examples/opengl_render_loop.cpp
-```
-
-On Windows, it usually uses:
-
-- `engine_core`
-- `engine_forward`
+- the shared sources listed above
 - `engine_platform_win32`
-- `engine_opengl`
+- `engine_dx11` (linked via `krom_link_self_registering_addon`)
 
-On GLFW-based setups, it can use:
+---
 
-- `engine_core`
-- `engine_forward`
-- `engine_platform_glfw`
-- `engine_opengl`
+### `krom_pbr_shadow_vulkan`
+
+This is the Vulkan PBR + shadow example.
+
+It uses:
+
+- the shared sources listed above
+- `engine_platform_win32`
+- `engine_vulkan` (linked via `krom_link_self_registering_addon`)
+
+---
+
+### `krom_pbr_shadow_opengl`
+
+This is the OpenGL PBR + shadow example.
+
+It uses:
+
+- the shared sources listed above
+- `engine_platform_win32` or `engine_platform_glfw` depending on configuration
+- `engine_opengl` (linked via `krom_link_self_registering_addon`)
 
 ---
 
@@ -338,14 +355,15 @@ In CMake, targets are connected to the libraries they use.
 Example:
 
 ```cmake
-target_link_libraries(engine_dx11_render_loop PRIVATE
+target_link_libraries(krom_pbr_shadow_dx11 PRIVATE
     engine_core
+    engine_renderer_orchestration_layer
     engine_forward
     engine_platform_win32
 )
 ```
 
-This means that `engine_dx11_render_loop` is built with access to those engine modules.
+This means that `krom_pbr_shadow_dx11` is built with access to those engine modules.
 
 In other words, the example program can use the code contained in those libraries.
 
@@ -444,20 +462,20 @@ krom_link_self_registering_addon(my_game engine_opengl)
 
 ## Asset copy step in the examples
 
-The render-loop example targets copy the `assets` directory into the executable output folder after the build.
+The example targets copy the `assets` directory into the executable output folder after the build.
 
 That is why the examples can usually run directly after compilation without manually moving assets.
 
 The CMake pattern looks like this:
 
 ```cmake
-add_custom_command(TARGET engine_dx11_render_loop POST_BUILD
+add_custom_command(TARGET krom_pbr_shadow_dx11 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/assets
-        $<TARGET_FILE_DIR:engine_dx11_render_loop>/assets)
+        $<TARGET_FILE_DIR:krom_pbr_shadow_dx11>/assets)
 ```
 
-The OpenGL example uses the same idea.
+The Vulkan and OpenGL examples use the same pattern.
 
 ---
 
@@ -484,9 +502,19 @@ If you only want the practical picture, this is enough:
 ### DX11 example
 
 ```text
-engine_dx11_render_loop
+krom_pbr_shadow_dx11
     -> engine_dx11
-    -> engine_forward
+    -> engine_forward + engine_pbr + engine_shadow + engine_lighting + ...
+    -> engine_platform_win32
+    -> engine_core
+```
+
+### Vulkan example
+
+```text
+krom_pbr_shadow_vulkan
+    -> engine_vulkan
+    -> engine_forward + engine_pbr + engine_shadow + engine_lighting + ...
     -> engine_platform_win32
     -> engine_core
 ```
@@ -494,9 +522,9 @@ engine_dx11_render_loop
 ### OpenGL example
 
 ```text
-engine_opengl_render_loop
+krom_pbr_shadow_opengl
     -> engine_opengl
-    -> engine_forward
+    -> engine_forward + engine_pbr + engine_shadow + engine_lighting + ...
     -> engine_platform_win32 or engine_platform_glfw
     -> engine_core
 ```
@@ -528,8 +556,9 @@ The important points are simple:
 - the engine is split into modules instead of one large target
 - `engine_core` is the base of the engine
 - platform layers handle OS-specific integration
-- DX11 and OpenGL are separate renderer backends
-- example programs are small applications that combine the required modules
+- DX11, Vulkan, and OpenGL are separate renderer backend addons
+- example programs (`krom_pbr_shadow_dx11`, `krom_pbr_shadow_vulkan`, `krom_pbr_shadow_opengl`) combine the required modules from shared sources under `examples/`
 - self-registering addons must be linked with the helper function, not only with a normal library link
 
 That is the build setup in practical terms.
+
