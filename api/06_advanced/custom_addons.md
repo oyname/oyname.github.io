@@ -84,13 +84,9 @@ class MyExtractionStep final : public engine::renderer::ISceneExtractionStep {
 public:
     std::string_view GetName() const noexcept override { return "MyExtraction"; }
 
-    void Extract(const ecs::World& world, SceneSnapshot& snapshot) const override {
-        world.View<TransformComponent, MySpecialComponent>(
-            [&snapshot](EntityID id,
-                        const TransformComponent& t,
-                        const MySpecialComponent& s) {
-                snapshot.AddCustomData(id, s);
-            });
+    void Extract(const SceneExtractionContext& ctx) const override {
+        // Read ECS data via ctx and fill the scene snapshot.
+        (void)ctx;
     }
 };
 ```
@@ -99,28 +95,25 @@ public:
 
 ## Registering the feature
 
-Register it with `RenderSystem` or `PlatformRenderLoop` before `Initialize`:
+Features are registered directly with `RenderSystem` before the render loop is initialized. The standard pattern is to expose a `CreateMyFeature()` factory function from the AddOn and call `RegisterFeature` from the application or example bootstrap code:
 
 ```cpp
-loop.GetRenderSystem().RegisterFeature(
-    std::make_unique<MyFeature>());
+// In ExampleApp / main — before Initialize():
+renderer::RenderSystem& renderSystem = m_renderLoop.GetRenderSystem();
+renderSystem.RegisterFeature(std::make_unique<MyFeature>());
 ```
 
-For self-registering AddOns (the pattern used by the built-in backends), create a static `Registrar` object in a `.cpp` file:
+Multiple features can be registered in sequence:
 
 ```cpp
-// MyFeature_register.cpp
-namespace {
-struct AutoRegister {
-    AutoRegister() {
-        // called before main()
-        engine::renderer::GlobalFeatureRegistry::Register(
-            std::make_unique<MyFeature>());
-    }
-};
-static AutoRegister s_reg;
-}
+renderer::RenderSystem& renderSystem = m_renderLoop.GetRenderSystem();
+renderSystem.RegisterFeature(addons::mesh_renderer::CreateMeshRendererFeature());
+renderSystem.RegisterFeature(addons::lighting::CreateLightingFeature());
+renderSystem.RegisterFeature(addons::shadow::CreateShadowFeature());
+renderSystem.RegisterFeature(std::make_unique<MyFeature>());
 ```
+
+There is no `GlobalFeatureRegistry` or static auto-registration for feature AddOns. Registration always happens explicitly in application bootstrap code.
 
 ---
 
@@ -129,15 +122,16 @@ static AutoRegister s_reg;
 ```cmake
 add_library(engine_myfeature STATIC
     MyFeature.cpp
-    MyFeature_register.cpp
 )
 
 target_link_libraries(engine_myfeature PUBLIC engine_core)
 target_compile_definitions(engine_myfeature PUBLIC KROM_MYFEATURE)
 
-# Self-registering addons must use this helper to avoid linker dead-stripping
-krom_link_self_registering_addon(my_app engine_myfeature)
+# Link the feature AddOn to the application target:
+target_link_libraries(my_app PRIVATE engine_myfeature)
 ```
+
+Feature AddOns do not use static auto-registration, so the `krom_link_self_registering_addon` helper is not required here. That helper is only needed for backend AddOns that register themselves through `DeviceFactory::Registrar`.
 
 ---
 
