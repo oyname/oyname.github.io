@@ -52,7 +52,6 @@ Available backend types in the current API:
 
 - `DeviceFactory::BackendType::Null`
 - `DeviceFactory::BackendType::DirectX11`
-- `DeviceFactory::BackendType::DirectX12`
 - `DeviceFactory::BackendType::OpenGL`
 - `DeviceFactory::BackendType::Vulkan`
 
