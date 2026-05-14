@@ -17,6 +17,7 @@
 # Renderer
 - [Device](03_renderer/device)
 - [Material](03_renderer/material)
+- [IBL / Environment](03_renderer/ibl)
 - [RenderGraph](03_renderer/rendergraph)
 - [Pipeline](03_renderer/pipeline)
 
