@@ -2,156 +2,183 @@
 
 `engine::renderer::MaterialSystem` · `engine::renderer::MaterialDesc` · `engine::renderer::MaterialHandle`
 
-Materials describe **what is rendered**, **how it is shaded**, and **which fixed pipeline state is required**. A material combines shader references, render-pass classification, vertex layout, render target formats, depth/blend/rasterizer state, semantic material inputs, and optional explicit shader parameters.
+Materials describe **what is rendered**, **how it is shaded**, and **which fixed pipeline state is required**. A material combines domain and surface classification, feature flags, shader references, vertex layout, render target formats, depth/blend/rasterizer state, named parameters, texture slots, and render policy.
 
 `MaterialSystem` stores and manages registered material descriptions. A material can be used directly or cloned as an instance. Instances inherit the base material setup and can override parameter values without changing the underlying pipeline as long as the pipeline-relevant state stays identical.
 
+Materials are not registered directly through `MaterialSystem::RegisterMaterial`. The correct entry point for full material creation is `MaterialRuntimeBridge::RegisterMaterial`, which combines a `MaterialDesc` with a `MaterialRuntimeDesc` and returns a `MaterialHandle`.
+
 ---
 
-## What belongs to a material
+## What belongs to a MaterialDesc
 
-A `MaterialDesc` can define:
+`MaterialDesc` defines the logical, backend-neutral material description.
 
-- material identity: `name`
-- render-pass usage: `passTag`
-- shading model: `model`
-- shaders: `vertexShader`, `fragmentShader`
-- vertex input: `vertexLayout`
-- output formats: `colorFormat`, `depthFormat`
-- fixed pipeline state:
-  - `rasterizer`
-  - `blend`
-  - `depthStencil`
-  - `renderPolicy`
-- explicit shader parameters: `params`
-- semantic material inputs:
-  - `semanticTextures[...]`
-  - `semanticValues[...]`
+Fields:
 
-The current system supports both:
+| Field | Type | Meaning |
+|---|---|---|
+| `name` | `std::string` | Human-readable identifier |
+| `surface` | `MaterialSurfaceType` | Surface behavior: `Opaque`, `Transparent`, `Cutout`, `Unlit`, `ShadowOnly` |
+| `features` | `MaterialFeatureFlags` | Bitmask of active material features |
+| `domain` | `MaterialDomain` | Where the material is used: `Mesh`, `Postprocess`, `UI`, `Shadow`, `DepthOnly`, `Debug` |
+| `parameters` | `vector<MaterialParam>` | Named typed parameters (float, vec4, texture, sampler) |
+| `textureSlots` | `vector<MaterialTextureSlot>` | Named texture bindings with semantic annotations |
+| `parameterLayout` | — | CB layout descriptor derived from parameter list |
+| `renderPolicy` | `MaterialRenderPolicy` | Engine-level policy: culling, shadow casting/receiving |
+| `sortLayer` | `uint32_t` | Sort layer for draw-order control |
+| `materialGraph` | — | Optional shader graph descriptor |
 
-- **explicit parameter-driven materials** for shaders that bind named parameters directly
-- **engine-semantic materials** for standard material inputs such as base color, metallic, roughness, normal, emissive, and related factors
+---
+
+## MaterialDomain
+
+| Value | Usage |
+|---|---|
+| `MaterialDomain::Mesh` | Standard geometry rendering |
+| `MaterialDomain::Postprocess` | Full-screen and post-processing passes |
+| `MaterialDomain::UI` | Overlay and UI rendering |
+| `MaterialDomain::Shadow` | Shadow map passes |
+| `MaterialDomain::DepthOnly` | Depth-only prepass |
+| `MaterialDomain::Debug` | Debug visualization passes |
+
+---
+
+## MaterialSurfaceType
+
+| Value | Meaning |
+|---|---|
+| `MaterialSurfaceType::Opaque` | Fully opaque surface |
+| `MaterialSurfaceType::Transparent` | Alpha-blended surface |
+| `MaterialSurfaceType::Cutout` | Alpha-tested / masked surface |
+| `MaterialSurfaceType::Unlit` | No lighting contribution |
+| `MaterialSurfaceType::ShadowOnly` | Receives shadows but does not render visibly |
+
+---
+
+## MaterialFeatureFlags
+
+Feature flags are combined with `|`. They control which shader permutation is selected and which parameter slots are active.
+
+Commonly used flags:
+
+| Flag | Meaning |
+|---|---|
+| `PbrMetalRough` | PBR metallic/roughness workflow |
+| `NormalMap` | Normal mapping enabled |
+| `BaseColorMap` | Albedo texture slot active |
+| `MetallicMap` | Separate metallic texture |
+| `RoughnessMap` | Separate roughness texture |
+| `OcclusionMap` | Ambient occlusion texture |
+| `EmissiveMap` | Emissive texture |
+| `OrmMap` | Packed ORM texture (occlusion/roughness/metallic) |
+| `IblMap` | IBL environment contribution enabled |
+| `AlphaTest` | Alpha cutout test enabled |
+| `DoubleSided` | Disables backface culling |
+| `Unlit` | No lighting, output base color directly |
+| `ShadowCaster` | Material participates in shadow pass |
+
+---
+
+## MaterialRenderPolicy
+
+`MaterialRenderPolicy` contains engine-level rendering behavior.
+
+Relevant fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `cull.mode` | `MaterialCullMode` | `Back`, `Front`, or `None` |
+| `castShadows` | `bool` | Whether the material casts shadows |
+| `receiveShadows` | `bool` | Whether the material receives shadows |
+
+---
+
+## MaterialParam helpers
+
+Parameters are constructed with helper functions defined in the engine:
+
+```cpp
+MaterialParam MakeFloatParam(const char* name, float value);
+MaterialParam MakeVec4Param(const char* name, math::Vec4 v);
+MaterialParam MakeTextureParam(const char* name);
+MaterialParam MakeSamplerParam(const char* name, uint32_t samplerIdx);
+```
+
+---
+
+## MaterialRuntimeDesc
+
+`MaterialRuntimeDesc` describes the GPU-side wiring: which shaders to use, which render pass to target, vertex layout, and render target formats.
+
+```cpp
+MaterialRuntimeDesc runtime{};
+runtime.renderPass     = StandardRenderPasses::Opaque();
+runtime.vertexShader   = vs;
+runtime.fragmentShader = fs;
+runtime.shadowShader   = shadow;
+runtime.vertexLayout   = vertexLayout;
+runtime.colorFormat    = Format::RGBA16_FLOAT;
+runtime.depthFormat    = Format::D32_FLOAT;
+```
+
+Available `StandardRenderPasses` factories:
+
+- `StandardRenderPasses::Opaque()`
+- `StandardRenderPasses::Shadow()`
+- `StandardRenderPasses::Postprocess()`
 
 ---
 
 ## Registering a material
 
+Use `MaterialRuntimeBridge::RegisterMaterial` to combine a `MaterialDesc` with a `MaterialRuntimeDesc` and obtain a handle:
+
 ```cpp
-renderer::MaterialDesc desc{};
-desc.name = "CubePBR";
-desc.passTag = renderer::RenderPassTag::Opaque;
-desc.model = renderer::MaterialModel::PBRMetalRough;
-desc.vertexShader = vsHandle;
-desc.fragmentShader = psHandle;
-desc.vertexLayout = vLayout;
-desc.colorFormat = renderer::Format::RGBA16_FLOAT;
-desc.depthFormat = renderer::Format::D24_UNORM_S8_UINT;
+MaterialParam MakeFloatParam(const char* name, float value) { ... }
+MaterialParam MakeVec4Param(const char* name, math::Vec4 v) { ... }
+MaterialParam MakeTextureParam(const char* name) { ... }
+MaterialParam MakeSamplerParam(const char* name, uint32_t idx) { ... }
 
-desc.semanticTextures[static_cast<size_t>(renderer::MaterialSemantic::BaseColor)] = {
-    .set = true,
-    .texture = gpuTex
-};
+MaterialDesc desc{};
+desc.name    = "MyMaterial";
+desc.domain  = MaterialDomain::Mesh;
+desc.surface = MaterialSurfaceType::Opaque;
+desc.features = MaterialFeatureFlags::PbrMetalRough
+              | MaterialFeatureFlags::NormalMap
+              | MaterialFeatureFlags::BaseColorMap;
 
-desc.semanticValues[static_cast<size_t>(renderer::MaterialSemantic::BaseColor)] = {
-    .set = true,
-    .data = { 1.f, 1.f, 1.f, 1.f }
-};
-
-desc.semanticValues[static_cast<size_t>(renderer::MaterialSemantic::Metallic)] = {
-    .set = true,
-    .data = { 0.0f }
-};
-
-desc.semanticValues[static_cast<size_t>(renderer::MaterialSemantic::Roughness)] = {
-    .set = true,
-    .data = { 0.5f }
-};
-
-desc.renderPolicy.cullMode = renderer::MaterialCullMode::None;
-desc.renderPolicy.castShadows = true;
+desc.renderPolicy.cull.mode      = MaterialCullMode::Back;
+desc.renderPolicy.castShadows    = true;
 desc.renderPolicy.receiveShadows = true;
 
-renderer::MaterialHandle mat = materials.RegisterMaterial(std::move(desc));
+desc.parameters = {
+    MakeVec4Param ("baseColorFactor",  {1, 1, 1, 1}),
+    MakeFloatParam("roughnessFactor",  0.5f),
+    MakeFloatParam("metallicFactor",   0.0f),
+    MakeFloatParam("normalStrength",   1.0f),
+    MakeFloatParam("alphaCutoff",      0.5f),
+    MakeTextureParam("albedo"),
+    MakeTextureParam("normal"),
+    MakeSamplerParam("sLinearWrap", SamplerSlots::LinearWrap),
+};
+desc.textureSlots = {
+    { "albedo", MaterialTextureSemantic::BaseColor },
+    { "normal", MaterialTextureSemantic::Normal    },
+};
+
+MaterialRuntimeDesc runtime{};
+runtime.renderPass     = StandardRenderPasses::Opaque();
+runtime.vertexShader   = vs;
+runtime.fragmentShader = fs;
+runtime.shadowShader   = shadow;
+runtime.vertexLayout   = vertexLayout;
+runtime.colorFormat    = Format::RGBA16_FLOAT;
+runtime.depthFormat    = Format::D32_FLOAT;
+
+MaterialHandle mat = MaterialRuntimeBridge::RegisterMaterial(
+    materialSystem, std::move(desc), runtime);
 ```
-
-This creates a backend-neutral material description. The actual backend pipeline object is derived later from the material state and cached through the pipeline cache.
-
----
-
-## Explicit parameter-based materials
-
-Materials can still be authored with explicit named parameters when a shader expects direct bindings instead of engine semantics.
-
-```cpp
-renderer::MaterialParam albedoParam{};
-albedoParam.name = "albedo";
-albedoParam.type = renderer::MaterialParam::Type::Texture;
-albedoParam.texture = gpuTex;
-
-renderer::MaterialParam samplerParam{};
-samplerParam.name = "sampler_albedo";
-samplerParam.type = renderer::MaterialParam::Type::Sampler;
-samplerParam.samplerIdx = 0u;
-
-renderer::MaterialDesc desc{};
-desc.name = "CubeUnlit";
-desc.passTag = renderer::RenderPassTag::Opaque;
-desc.vertexShader = vsHandle;
-desc.fragmentShader = psHandle;
-desc.vertexLayout = vLayout;
-desc.colorFormat = renderer::Format::RGBA16_FLOAT;
-desc.depthFormat = renderer::Format::D24_UNORM_S8_UINT;
-desc.params.push_back(albedoParam);
-desc.params.push_back(samplerParam);
-
-renderer::MaterialHandle mat = materials.RegisterMaterial(std::move(desc));
-```
-
-This path is useful for custom shaders and non-standard bindings. It is also the safer option when a backend-specific semantic path is not yet fully implemented.
-
----
-
-## Semantic material inputs
-
-The semantic material path is the preferred way to describe standard surface data in a backend-neutral form.
-
-Typical semantics include:
-
-- `BaseColor`
-- `Normal`
-- `Metallic`
-- `Roughness`
-- `Emissive`
-- related factor values such as color multipliers or scalar overrides
-
-Each semantic slot can be provided either as:
-
-- a texture via `semanticTextures[...]`
-- a fallback value via `semanticValues[...]`
-
-This allows flexible material authoring:
-
-- base color only
-- base color + normal
-- base color + metallic/roughness
-- full PBR
-- unlit-style usage with only selected semantics
-
-If a texture is missing, the runtime and shader path can fall back to the semantic value or backend-provided default textures, depending on the material model and shader implementation.
-
----
-
-## Material model
-
-`MaterialDesc::model` describes the intended shading model.
-
-Common cases:
-
-- `renderer::MaterialModel::PBRMetalRough`
-- backend- or shader-specific simpler models for unlit or custom shading
-
-The material model does **not** replace shader selection. Shaders still define the actual code path. The model tells the engine how to interpret semantic material inputs and how the material should be treated by runtime systems.
 
 ---
 
@@ -160,11 +187,14 @@ The material model does **not** replace shader selection. Shaders still define t
 Material instances are derived from a registered base material.
 
 ```cpp
-renderer::MaterialHandle redInstance = materials.CreateInstance(baseMaterial, "RedInstance");
-materials.SetVec4(redInstance, "baseColor", { 1.f, 0.f, 0.f, 1.f });
+MaterialHandle inst = materials.CreateInstance(mat, "MyInstance");
+materials.SetVec4   (inst, "baseColorFactor", {1.f, 0.2f, 0.1f, 1.f});
+materials.SetFloat  (inst, "roughnessFactor", 0.8f);
+materials.SetTexture(inst, "albedo",          gpuAlbedoTex);
+materials.MarkDirty (inst);
 ```
 
-Instances reuse the same pipeline state as long as no pipeline-relevant fields differ. This means parameter variation does not automatically create a new PSO.
+Instances reuse the same pipeline state as long as no pipeline-relevant fields differ. Parameter variation does not automatically create a new PSO.
 
 ---
 
@@ -173,62 +203,69 @@ Instances reuse the same pipeline state as long as no pipeline-relevant fields d
 Named parameters can be updated through the material system.
 
 ```cpp
-materials.SetFloat(handle, "roughness", 0.4f);
-materials.SetVec4(handle, "baseColor", { 0.8f, 0.6f, 0.2f, 1.f });
-materials.SetTexture(handle, "albedoMap", texHandle);
-materials.MarkDirty(handle);
+materials.SetFloat  (handle, "roughnessFactor", 0.4f);
+materials.SetVec4   (handle, "baseColorFactor", {0.8f, 0.6f, 0.2f, 1.f});
+materials.SetTexture(handle, "albedo",          texHandle);
+materials.MarkDirty (handle);
 ```
 
 Current behavior:
 
-- `SetFloat` and `SetVec4` update parameter data and mark the material dirty automatically
-- `SetTexture` updates the texture binding, but an explicit `MarkDirty(handle)` may still be required depending on the path and backend
+- `SetFloat` and `SetVec4` update parameter data and mark the material dirty automatically.
+- `SetTexture` updates the texture binding, but an explicit `MarkDirty(handle)` may still be required depending on the path and backend.
 
 When in doubt, call `MarkDirty(handle)` after changing texture-bound parameters.
 
 ---
 
-## Constant buffer data
+## PbrMasterMaterial
 
-For parameter-driven materials, the system can pack parameter values into constant buffer layout data.
+`pbr::PbrMasterMaterial` is a convenience layer on top of `MaterialRuntimeBridge`. It manages a permutation cache internally: each feature-flag combination maps to a distinct base material handle. `Build()` selects the correct permutation automatically based on which builder methods were called.
+
+### Setup
 
 ```cpp
-const std::vector<uint8_t>& cbData = materials.GetCBData(handle);
-const CbLayout& cbLayout = materials.GetCBLayout(handle);
+pbr::PbrMasterMaterial::Config cfg{};
+cfg.vs              = vs;
+cfg.fs              = fs;
+cfg.shadow          = shadow;
+cfg.vertexLayout    = layout;
+cfg.cullMode        = MaterialCullMode::Back;
+cfg.castShadows     = true;
+cfg.receiveShadows  = true;
 
-uint32_t offset = cbLayout.GetOffset("roughness"); // UINT32_MAX if not found
+auto master = pbr::PbrMasterMaterial::Create(materialSystem, cfg);
+```
+
+### Creating instances via fluent builder
+
+```cpp
+MaterialHandle mat = master.CreateInstance("MyCube")
+    .BaseColor(gpuAlbedo)       // enables BaseColorMap flag automatically
+    .Normal(gpuNormal, 1.5f)    // enables NormalMap flag + sets normalStrength
+    .Roughness(0.5f)
+    .Metallic(0.2f)
+    .IBL(true)
+    .DoubleSided(false)
+    .Build();
+```
+
+The fluent builder sets the appropriate `MaterialFeatureFlags` for each method called. `Build()` looks up or creates the matching permutation and returns an instance handle ready for use.
+
+---
+
+## Constant buffer data
+
+For parameter-driven materials, the system packs parameter values into constant buffer layout data.
+
+```cpp
+const std::vector<uint8_t>& cbData   = materials.GetCBData(handle);
+const CbLayout&             cbLayout = materials.GetCBLayout(handle);
+
+uint32_t offset = cbLayout.GetOffset("roughnessFactor"); // UINT32_MAX if not found
 ```
 
 Packing follows the engine's constant-buffer layout rules, aligned to the runtime shader binding model used by the active backend.
-
----
-
-## Render pass tags
-
-| Tag | Usage |
-|---|---|
-| `RenderPassTag::Opaque` | Default forward pass for opaque geometry |
-| `RenderPassTag::AlphaCutout` | Masked geometry with alpha test / cutout logic |
-| `RenderPassTag::Transparent` | Transparent geometry, typically back-to-front |
-| `RenderPassTag::Shadow` | Shadow map rendering pass |
-| `RenderPassTag::UI` | Overlay/UI rendering |
-| `RenderPassTag::Postprocess` | Full-screen and post-processing passes |
-
-The render pass tag determines where and how the material is scheduled inside the frame.
-
----
-
-## Render policy
-
-`MaterialDesc::renderPolicy` contains engine-level rendering behavior that is not just raw backend state.
-
-Typical fields include:
-
-- `cullMode`
-- `castShadows`
-- `receiveShadows`
-
-This separates higher-level engine policy from low-level rasterizer, blend, and depth state.
 
 ---
 
@@ -237,7 +274,7 @@ This separates higher-level engine policy from low-level rasterizer, blend, and 
 The pipeline state derived from a material is converted into a cache key and looked up in the pipeline cache.
 
 ```cpp
-PipelineKey key = materials.BuildPipelineKey(handle);
+PipelineKey key = MaterialRuntimeBridge::BuildPipelineKey(materials, handle);
 ```
 
 Two materials with identical pipeline-relevant state share the same pipeline key and therefore the same underlying PSO or backend pipeline object, regardless of differing parameter values.
@@ -262,9 +299,9 @@ Parameter data and material instance values do not by themselves create a separa
 Draw calls are sorted before submission to reduce state changes and preserve correct rendering order.
 
 ```cpp
-SortKey key = SortKey::ForOpaque(passTag, layer, pipelineHash, linearDepth);
-SortKey key = SortKey::ForTransparent(passTag, layer, linearDepth);
-SortKey key = SortKey::ForUI(layer, drawOrder);
+SortKey key = SortKey::ForOpaque    (domain, layer, pipelineHash, linearDepth);
+SortKey key = SortKey::ForTransparent(domain, layer, linearDepth);
+SortKey key = SortKey::ForUI        (layer, drawOrder);
 ```
 
 Typical behavior:
@@ -275,19 +312,30 @@ Typical behavior:
 
 ---
 
+## Render policy
+
+`MaterialDesc::renderPolicy` separates engine-level rendering policy from low-level rasterizer, blend, and depth state.
+
+Typical fields:
+
+- `cull.mode` — `MaterialCullMode::Back`, `Front`, or `None`
+- `castShadows` — whether the material contributes to the shadow pass
+- `receiveShadows` — whether the material receives shadowing
+
+---
+
 ## Current practical guidance
 
-Use **semantic materials** when:
+Use `PbrMasterMaterial` when:
 
-- the shader follows the engine's standard material semantics
-- the material should stay backend-neutral
-- the goal is flexible PBR-style authoring without exposing backend-specific bindings in gameplay or scene code
+- authoring standard PBR meshes with metallic/roughness workflow
+- wanting automatic permutation management based on which texture slots are bound
+- preferring a fluent, asset-oriented creation API
 
-Use **explicit named parameters** when:
+Use `MaterialRuntimeBridge::RegisterMaterial` directly when:
 
-- the shader is custom
-- the binding names are shader-specific
-- a backend path is still incomplete or under debugging
-- a postprocess or utility pass uses direct resource bindings
+- the shader is custom and does not follow the PBR conventions
+- the material targets a non-mesh domain (postprocess, UI, shadow-only, debug)
+- fine-grained control over feature flags, texture semantics, and runtime desc is needed
 
-In the current engine state, semantic materials are the long-term direction, while explicit parameter materials remain important for custom passes and debugging backend-specific issues.
+Use explicit `materials.SetFloat` / `SetVec4` / `SetTexture` for runtime parameter variation on existing instances.
