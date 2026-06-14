@@ -3,1039 +3,828 @@
 This reference describes how to use the KROM ENGINE API.
 
 The focus is on the direct engine path:
-- engine initialization
-- window and frame loop
-- event system and input
-- DX11 adapter enumeration and context creation
-- renderer and resource API
+- engine initialization and the frame loop
+- platform window and input
+- backend selection (DX11 / DX12 / OpenGL / Vulkan)
+- render features / AddOns
 - ECS usage
 - mesh and material setup
 
 For architecture and high-level usage flow, see the API Overview.
 
+> **Conventions.** Code samples assume `using namespace engine;`. Fully qualified,
+> the types live in `engine::platform` (window/input), `engine::renderer`
+> (`PlatformRenderLoop`, `RenderSystem`, `MaterialSystem`, `RenderView`,
+> `DeviceFactory`), `engine::ecs` (`World`, `ComponentMetaRegistry`), `engine`
+> (core components, `Scene`), and the AddOns under `engine::addons::*` /
+> `engine::renderer::addons::*`.
+>
+> All signatures below are taken from the current headers. Where a subsystem is only
+> summarized (asset loading), that is called out explicitly rather than invented.
+
 ---
 
-## 1. Window and Engine
+## 1. Window and Platform
 
-## `WindowDesc`
+KROM does not expose a single Win32 window class. Windowing goes through a
+platform-neutral abstraction (`IPlatform` creates an `IWindow`); concrete platforms
+are Win32, GLFW/Linux, and a headless platform for tests.
 
-Used to configure the Win32 window.
+### `platform::WindowDesc`
+
+Configures the window and (optionally) the OpenGL context hints.
 
 ```cpp
 struct WindowDesc
 {
-    int         width      = 1280;
-    int         height     = 720;
-    std::string title      = "GDX";
-    bool        resizable  = true;
-    bool        borderless = true;
+    uint32_t    width             = 1280u;
+    uint32_t    height            = 720u;
+    bool        visible           = true;
+    bool        resizable         = true;
+    WindowMode  windowMode        = WindowMode::Windowed;
+    uint32_t    framebufferWidth  = 1280u;
+    uint32_t    framebufferHeight = 720u;
+    std::string title             = "KROM Engine";
+
+    bool openglContext      = false;   // OpenGL backend only
+    int  openglMajor        = 4;
+    int  openglMinor        = 1;
+    bool openglDebugContext = false;
+
+    bool vsync = true;
 };
+
+enum class WindowMode { Windowed, Maximized, BorderlessWindowed, Fullscreen };
 ```
 
-### Fields
-- `width` — window width
-- `height` — window height
-- `title` — window title
-- `resizable` — whether the window can be resized
-- `borderless` — whether the window is borderless
-
----
-
-## `IGDXWindow`
+### `platform::IWindow`
 
 Platform-neutral window interface.
 
 ```cpp
-class IGDXWindow
+class IWindow
 {
 public:
-    virtual ~IGDXWindow() = default;
+    virtual bool             Create(const WindowDesc& desc) = 0;
+    virtual void             Destroy() = 0;
+    virtual WindowEventState PumpEvents(IInput& input) = 0;
 
-    virtual void        PollEvents() = 0;
-    virtual bool        ShouldClose() const = 0;
-    virtual int         GetWidth() const = 0;
-    virtual int         GetHeight() const = 0;
-    virtual bool        GetBorderless() const = 0;
-    virtual const char* GetTitle() const = 0;
-    virtual void        SetTitle(const char* title) = 0;
+    virtual bool        IsOpen() const = 0;
+    virtual bool        ShouldClose() const;        // default: !IsOpen()
+    virtual void        RequestClose() = 0;
+    virtual void        Resize(uint32_t width, uint32_t height) = 0;
+    virtual void        SetTitle(const char* title);
+
+    virtual void*       GetNativeHandle() const = 0; // HWND / GLFWwindow*
+    virtual uint32_t    GetWidth() const = 0;
+    virtual uint32_t    GetHeight() const = 0;
+    virtual uint32_t    GetFramebufferWidth() const;
+    virtual uint32_t    GetFramebufferHeight() const;
+    virtual float       GetDPIScale() const;
+    virtual const char* GetBackendName() const = 0;
+    virtual std::vector<std::filesystem::path> ConsumeDroppedFiles();
 };
 ```
 
-### Functions
-- `PollEvents()` — process pending OS/window messages
-- `ShouldClose()` — returns whether the window should close
-- `GetWidth()` — current width
-- `GetHeight()` — current height
-- `GetBorderless()` — borderless state
-- `GetTitle()` — current title
-- `SetTitle(const char* title)` — sets the window title
+> `PumpEvents(IInput&)` both processes OS messages and feeds key/mouse events into the
+> supplied input object. It returns a `WindowEventState` (quit requested, resized, new
+> size). In normal use you do **not** drive `IWindow` directly —
+> `PlatformRenderLoop::Tick` pumps events for you.
 
----
+### `platform::IPlatform`
 
-## `GDXWin32Window`
-
-Concrete Win32 window implementation.
+Owns platform initialization, the window factory, input, threading, and timing.
 
 ```cpp
-class GDXWin32Window final : public IGDXWindow, public IGDXWin32NativeAccess
+class IPlatform
 {
 public:
-    GDXWin32Window(const WindowDesc& desc, GDXEventQueue& events);
-    ~GDXWin32Window() override;
-
-    bool Create();
-
-    void        PollEvents() override;
-    bool        ShouldClose() const override;
-    int         GetWidth() const override;
-    int         GetHeight() const override;
-    bool        GetBorderless() const override;
-    const char* GetTitle() const override;
-    void        SetTitle(const char* title) override;
-
-    bool QueryNativeHandles(GDXWin32NativeHandles& outHandles) const override;
-    bool IsBorderless() const override;
+    virtual bool             Initialize() = 0;
+    virtual void             Shutdown() = 0;
+    virtual void             PumpEvents() = 0;
+    virtual double           GetTimeSeconds() const = 0;
+    virtual IWindow*         CreateWindow(const WindowDesc& desc) = 0;
+    virtual IInput*          GetInput() = 0;
+    virtual IThreadFactory*  GetThreadFactory() = 0;
+    virtual void             GetPrimaryMonitorSize(uint32_t& w, uint32_t& h) const;
 };
 ```
 
-### Functions
-- `GDXWin32Window(const WindowDesc& desc, GDXEventQueue& events)` — constructs the window object
-- `Create()` — creates the native Win32 window
-- inherited `IGDXWindow` functions — normal runtime window operations
-- `QueryNativeHandles(...)` — exposes Win32 handles needed for DX11 context creation
-- `IsBorderless()` — Win32-side borderless query
+You pass an `IPlatform&` into `PlatformRenderLoop::Initialize`; the loop creates the
+window through it.
 
 ---
 
-## `GIDXEngine`
+## 2. Input
 
-Top-level runtime loop.
+KROM input is **instance-based** (no global/static input state). You obtain the active
+`IInput` from the platform, or via `loop.GetInput()`.
+
+### `platform::Key` / `platform::MouseButton`
 
 ```cpp
-class GIDXEngine
+enum class Key : uint16_t {
+    Unknown, Escape, Space, Enter, Tab, Backspace,
+    LeftShift, RightShift, LeftCtrl, RightCtrl, LeftAlt, RightAlt,
+    Left, Right, Up, Down,
+    Home, End, PageUp, PageDown, Insert, Delete,
+    A, B, /* ... */ Z,
+    Num0, /* ... */ Num9,
+    Plus, Minus, Equals,
+    F1, /* ... */ F12,
+    Count
+};
+
+enum class MouseButton : uint8_t { Left, Right, Middle, X1, X2, Count };
+```
+
+### `platform::IInput`
+
+```cpp
+class IInput
 {
 public:
-    GIDXEngine(std::unique_ptr<IGDXWindow> window,
-               std::unique_ptr<IGDXRenderer> renderer,
-               GDXEventQueue& events);
+    virtual void BeginFrame() = 0;   // once per frame, before queries
 
-    bool Initialize();
-    void Run();
-    bool Step();
+    // Fed by the windowing layer:
+    virtual void OnKeyEvent(const InputKeyEvent&) = 0;
+    virtual void OnMouseButtonEvent(const InputMouseButtonEvent&) = 0;
+    virtual void OnMouseMoveEvent(const InputMouseMoveEvent&) = 0;
+    virtual void OnMouseScrollEvent(const InputMouseScrollEvent&) = 0;
 
-    float GetDeltaTime() const;
-    float GetTotalTime() const;
+    // Keyboard:
+    virtual bool KeyDown(Key) const = 0;      // currently held
+    virtual bool KeyHit(Key) const = 0;       // pressed this frame
+    virtual bool KeyReleased(Key) const = 0;  // released this frame
 
-    using EventFn = std::function<void(const Event&)>;
-    void SetEventCallback(EventFn fn);
+    // Mouse:
+    virtual bool    MouseButtonDown(MouseButton) const = 0;
+    virtual bool    MouseButtonHit(MouseButton) const = 0;
+    virtual bool    MouseButtonReleased(MouseButton) const = 0;
+    virtual int32_t MouseX() const = 0;
+    virtual int32_t MouseY() const = 0;
+    virtual int32_t MouseDeltaX() const = 0;
+    virtual int32_t MouseDeltaY() const = 0;
+    virtual float   MouseScrollDelta() const = 0;
+    virtual void    SetCursorMode(bool captured, bool hidden);
+};
+```
 
+### Example
+
+```cpp
+platform::IInput* input = loop.GetInput();
+
+if (input->KeyDown(platform::Key::Left))   { /* continuous movement */ }
+if (input->KeyHit(platform::Key::Space))   { /* one-shot action     */ }
+```
+
+> `BeginFrame()` is invoked by the platform/loop each frame; you normally only query.
+
+---
+
+## 3. Backend Selection
+
+KROM has no per-app DX11 adapter-enumeration API. Backends are registered as factories
+and selected by an enum at initialization time.
+
+```cpp
+// engine::renderer::DeviceFactory
+enum class BackendType { Null, DirectX11, DirectX12, OpenGL, Vulkan };
+```
+
+- `Null` — headless/no-op device (tests, CI).
+- `DirectX11`, `DirectX12`, `Vulkan` — modern HLSL path backends.
+- `OpenGL` — isolated 4.1 legacy path (macOS).
+
+You pass the chosen `BackendType` into `PlatformRenderLoop::Initialize`. Adapter/device
+details are described by `IDevice::DeviceDesc` (optional debug layer, app name, etc.).
+
+---
+
+## 4. Runtime Loop — `renderer::PlatformRenderLoop`
+
+The outer runtime entry point. It owns the window, input, device, and `RenderSystem`,
+and runs one frame at a time.
+
+```cpp
+class PlatformRenderLoop
+{
+public:
+    bool Initialize(DeviceFactory::BackendType backend,
+                    platform::IPlatform& platform,
+                    const platform::WindowDesc& windowDesc,
+                    events::EventBus* eventBus = nullptr,
+                    const IDevice::DeviceDesc& deviceDesc = {});
     void Shutdown();
+
+    bool Tick(const ecs::World& world,
+              const MaterialSystem& materials,
+              const RenderView& view,
+              platform::IPlatformTiming& timing,
+              const FramePipelineCallbacks& callbacks = {});
+
+    // Overload with offscreen render requests (render-to-texture):
+    bool Tick(const ecs::World& world,
+              const MaterialSystem& materials,
+              const RenderView& view,
+              platform::IPlatformTiming& timing,
+              const FramePipelineCallbacks& callbacks,
+              std::span<const OffscreenRenderRequest> offscreenRequests);
+
+    void SetPreRenderCallback(std::function<void(float dt)> cb); // animation/physics/AI
+
+    bool             ShouldExit() const noexcept;
+    platform::IWindow* GetWindow() const noexcept;
+    platform::IInput*  GetInput()  const noexcept;
+    RenderSystem&    GetRenderSystem() noexcept;
 };
 ```
-
-### Purpose
-`GIDXEngine` owns the window and renderer and controls the runtime loop.
 
 ### Functions
 
-#### `bool Initialize()`
-Initializes the engine.
-
-Typical behavior:
-- validates window and renderer
-- calls `renderer->Initialize()`
-- sets initial renderer size
-- starts timing state
-
-#### `void Run()`
-Runs the main loop until exit.
-
-#### `bool Step()`
-Executes exactly one frame.
-
-Typical frame flow:
-1. reset input state
-2. poll window events
-3. compute delta time
-4. process events
-5. skip rendering if minimized
-6. otherwise:
-   - `BeginFrame()`
-   - `Tick(dt)`
-   - `EndFrame()`
-
-Returns:
-- `true` if execution should continue
-- `false` if the application should stop
-
-#### `float GetDeltaTime() const`
-Returns the last frame delta time in seconds.
-
-#### `float GetTotalTime() const`
-Returns total runtime in seconds.
-
-#### `void SetEventCallback(EventFn fn)`
-Registers custom event handling.
-
-#### `void Shutdown()`
-Clean shutdown. Safe to call multiple times.
+- `Initialize(...)` — creates window + device + swapchain and brings the renderer up.
+  Register your render features **before** calling this (see §5).
+- `Tick(world, materials, view, timing)` — pumps events and renders one frame from the
+  current ECS state. Returns `false` when the window has been closed.
+- `SetPreRenderCallback(cb)` — runs once per frame after event pumping and before
+  rendering; this is where game-side systems (animation, physics, AI) advance.
+- `GetRenderSystem()` — access point for feature registration and stats.
+- `Shutdown()` — clean teardown (safe at end of run).
 
 ---
 
-## 2. Events and Input
+## 5. Render Features / AddOns — `RenderSystem`
 
-## Event Types
+KROM is AddOn-based: the renderer only extracts and draws what registered **features**
+describe. Register them on the loop's `RenderSystem` before `Initialize`.
 
 ```cpp
-enum class Key
-{
-    Unknown,
-    Escape, Space,
-    A, B, C, D, E, F, G, H, I, J, K, L, M,
-    N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
-    Left, Right, Up, Down
-};
-
-struct QuitEvent {};
-struct WindowResizedEvent { int width; int height; };
-struct KeyPressedEvent { Key key; bool repeat; };
-struct KeyReleasedEvent { Key key; };
-
-using Event = std::variant<QuitEvent, WindowResizedEvent, KeyPressedEvent, KeyReleasedEvent>;
+auto& rs = loop.GetRenderSystem();
+rs.RegisterFeature(addons::mesh_renderer::CreateMeshRendererFeature());
+rs.RegisterFeature(addons::lighting::CreateLightingFeature());
+rs.RegisterFeature(renderer::addons::forward::CreateForwardFeature());   // or Forward+
 ```
 
-### Meaning
-- `QuitEvent` — application quit request
-- `WindowResizedEvent` — window size changed
-- `KeyPressedEvent` — key pressed
-- `KeyReleasedEvent` — key released
+Verified feature factories and their namespaces:
 
-### ESC behavior
-ESC is already handled by the engine runtime and triggers shutdown behavior.
+| Factory | Namespace | Purpose |
+| --- | --- | --- |
+| `CreateMeshRendererFeature()` | `engine::addons::mesh_renderer` | mesh extraction/draw |
+| `CreateLightingFeature()` | `engine::addons::lighting` | light extraction |
+| `CreateForwardFeature(config = {})` | `engine::renderer::addons::forward` | forward render pipeline (Forward+ via config) |
+| `CreateShadowFeature()` | `engine::addons::shadow` | shadow maps / CSM |
+| `CreateGtaoFeature(outResources = nullptr)` | `engine::renderer::addons::gtao` | GTAO ambient occlusion |
+| `CreateOutlineFeature(getSelected, shouldOutline)` | `engine::renderer::addons::outline` | screen-space selection outline (HLSL only) |
+
+Registration order matters only in that all features must be registered **before**
+`Initialize`. Additional shipped AddOns (camera-view building, debug draw, particles,
+animation, prefab, editor) follow the same `Create…Feature()` pattern. After a frame,
+read back stats via `loop.GetRenderSystem().GetStats()`.
+
+> Bloom and tonemapping are **not** separate user features — they are stages of the
+> standard forward frame, toggled per view through `RenderView::enableBloom` and driven
+> by the tonemap material (see §12). GTAO ambient occlusion is gated by
+> `RenderView::enableAmbientOcclusion`; shadows by `RenderView::enableShadows`.
 
 ---
 
-## `GDXEventQueue`
+## 6. ECS Core
 
-Event queue written by platform code and consumed by the engine once per frame.
+### `ecs::ComponentMetaRegistry`
 
-### Purpose
-- collect events
-- provide consistent per-frame processing
-
----
-
-## `GDXInput`
-
-Per-frame keyboard state API.
+Declares which component types exist and how they are reflected. The `World` is built
+**from** a populated registry — there is no default `World`.
 
 ```cpp
-class GDXInput
+ecs::ComponentMetaRegistry registry;
+RegisterCoreComponents(registry);                          // engine
+addons::mesh_renderer::RegisterMeshRendererComponents(registry);
+addons::camera::RegisterCameraComponents(registry);        // engine
+addons::lighting::RegisterLightingComponents(registry);    // engine
+```
+
+### `ecs::World`
+
+```cpp
+class World
 {
 public:
-    static void BeginFrame();
-    static void OnEvent(const Event& e);
+    explicit World(ComponentMetaRegistry& registry);   // no default ctor
 
-    static bool KeyDown(Key key);
-    static bool KeyHit(Key key);
-    static bool KeyReleased(Key key);
+    EntityID CreateEntity();
+    void     DestroyEntity(EntityID id);
+    bool     IsAlive(EntityID id) const noexcept;
+    size_t   EntityCount() const noexcept;
+
+    template<typename T, typename... Args> T& Add(EntityID id, Args&&...);
+    template<typename T> void   Remove(EntityID id);
+    template<typename T> T*      Get(EntityID id) noexcept;
+    template<typename T> bool    Has(EntityID id) const noexcept;
+
+    template<typename... Ts, typename Func> void View(Func&& func);   // iterate matches
+    template<typename Func> void ForEachAlive(Func&& func) const;
 };
 ```
 
-### Functions
-- `BeginFrame()` — resets per-frame hit/release state
-- `OnEvent(const Event& e)` — feeds an event into input state
-- `KeyDown(Key key)` — key is currently held
-- `KeyHit(Key key)` — key was pressed this frame
-- `KeyReleased(Key key)` — key was released this frame
+> Note the names vs. other engines: the ECS container is `ecs::World` (not a
+> "Registry"), and iteration is `world.View<A, B>(fn)`.
 
 ### Example
 
 ```cpp
-if (GDXInput::KeyDown(Key::Left))
-{
-    // continuous movement
-}
+ecs::World world(registry);
 
-if (GDXInput::KeyHit(Key::Space))
-{
-    // one-shot action
-}
+EntityID e = world.CreateEntity();
+world.Add<TransformComponent>(e);
+world.Add<WorldTransformComponent>(e);
+world.Add<NameComponent>(e, NameComponent{"Cube"});
+
+world.View<TransformComponent, MeshComponent>(
+    [](EntityID id, TransformComponent& t, MeshComponent& m) { /* ... */ });
 ```
+
+### Handle Types
+
+Resources are referenced by typed, generation-checked handles (`MeshHandle`,
+`MaterialHandle`, `ShaderHandle`, `TextureHandle`, `BufferHandle`,
+`EnvironmentHandle`, …). Construct test/explicit handles with `Handle::Make(index, gen)`
+and check with `IsValid()`.
 
 ---
 
-## 3. DX11 Context Setup
+## 7. Core Components (`engine`, via `RegisterCoreComponents`)
 
-## `GDXDXGIAdapterInfo`
-
-Returned by adapter enumeration.
-
-```cpp
-struct GDXDXGIAdapterInfo
-{
-    unsigned int index;
-    std::wstring name;
-    size_t       dedicatedVRAM;
-    int          featureLevel;
-    std::wstring featureLevelName;
-};
-```
-
-### Fields
-- `index` — adapter index used for context creation
-- `name` — GPU name
-- `dedicatedVRAM` — dedicated VRAM in bytes
-- `featureLevel` — encoded DirectX feature level
-- `featureLevelName` — readable feature level text
-
----
-
-## `IGDXDXGIContext`
-
-Created DX11 device/swap-chain context.
-
-```cpp
-class IGDXDXGIContext
-{
-public:
-    virtual ~IGDXDXGIContext() = default;
-
-    virtual bool              IsValid() const = 0;
-    virtual void              Present(bool vsync) = 0;
-    virtual void              Resize(int w, int h) = 0;
-    virtual GDXDXGIDeviceInfo QueryDeviceInfo() const = 0;
-
-    virtual ID3D11Device*           GetDevice() const = 0;
-    virtual ID3D11DeviceContext*    GetDeviceContext() const = 0;
-    virtual ID3D11RenderTargetView* GetRenderTarget() const = 0;
-    virtual ID3D11DepthStencilView* GetDepthStencil() const = 0;
-};
-```
-
-### Functions
-- `IsValid()` — whether the DX11 context is usable
-- `Present(bool vsync)` — presents the backbuffer
-- `Resize(int w, int h)` — resizes backbuffer/depth targets
-- `QueryDeviceInfo()` — returns active device/adapter info
-- `GetDevice()` / `GetDeviceContext()` / `GetRenderTarget()` / `GetDepthStencil()` — raw DX11 objects for backend use
-
----
-
-## `GDXWin32DX11ContextFactory`
-
-Creates DX11 contexts for Win32 windows.
-
-```cpp
-class GDXWin32DX11ContextFactory
-{
-public:
-    static std::vector<GDXDXGIAdapterInfo> EnumerateAdapters();
-
-    static unsigned int FindBestAdapter(
-        const std::vector<GDXDXGIAdapterInfo>& adapters);
-
-    std::unique_ptr<IGDXDXGIContext> Create(
-        IGDXWin32NativeAccess& nativeAccess,
-        unsigned int adapterIndex) const;
-};
-```
-
-### Functions
-- `EnumerateAdapters()` — returns available hardware adapters
-- `FindBestAdapter(...)` — picks the adapter with the highest feature level
-- `Create(...)` — creates the DX11 context for the selected window and adapter
-
-### Return value
-- valid `IGDXDXGIContext` on success
-- `nullptr` on failure
-
----
-
-## 4. Renderer Layer
-
-## `IGDXRenderer`
-
-Generic renderer interface used by `GIDXEngine`.
-
-```cpp
-class IGDXRenderer
-{
-public:
-    virtual ~IGDXRenderer() = default;
-
-    virtual bool Initialize() = 0;
-    virtual void BeginFrame() = 0;
-    virtual void Tick(float dt) = 0;
-    virtual void EndFrame() = 0;
-    virtual void Resize(int w, int h) = 0;
-    virtual void Shutdown() = 0;
-};
-```
-
-### Functions
-- `Initialize()` — initialize renderer resources
-- `BeginFrame()` — start frame
-- `Tick(float dt)` — per-frame update/render work
-- `EndFrame()` — finish frame and present
-- `Resize(int w, int h)` — resize handling
-- `Shutdown()` — clean shutdown
-
----
-
-## `GDXDX11RenderBackend`
-
-Concrete DX11 backend.
-
-```cpp
-class GDXDX11RenderBackend final : public IGDXRenderBackend
-{
-public:
-    explicit GDXDX11RenderBackend(std::unique_ptr<IGDXDXGIContext> context);
-};
-```
-
-### Function
-- `GDXDX11RenderBackend(...)` — wraps the DX11 context into an engine backend
-
----
-
-## `GDXECSRenderer`
-
-Main user-facing renderer/runtime.
-
-```cpp
-class GDXECSRenderer final : public IGDXRenderer
-{
-public:
-    explicit GDXECSRenderer(std::unique_ptr<IGDXRenderBackend> backend);
-    ~GDXECSRenderer() override;
-
-    bool Initialize() override;
-    void BeginFrame() override;
-    void EndFrame() override;
-    void Resize(int w, int h) override;
-    void Shutdown() override;
-
-    using TickFn = std::function<void(float)>;
-    void SetTickCallback(TickFn fn);
-    void Tick(float dt);
-
-    Registry& GetRegistry();
-
-    ShaderHandle CreateShader(const std::wstring& vsFile,
-                              const std::wstring& psFile,
-                              uint32_t vertexFlags = GDX_VERTEX_DEFAULT);
-
-    ShaderHandle CreateShader(const std::wstring& vsFile,
-                              const std::wstring& psFile,
-                              uint32_t vertexFlags,
-                              const GDXShaderLayout& layout);
-
-    TextureHandle LoadTexture(const std::wstring& filePath, bool isSRGB = true);
-    TextureHandle CreateTexture(const ImageBuffer& image,
-                                const std::wstring& debugName,
-                                bool isSRGB = true);
-
-    MeshHandle UploadMesh(MeshAssetResource mesh);
-    MaterialHandle CreateMaterial(MaterialResource mat);
-
-    ShaderHandle GetDefaultShader() const;
-    void SetShadowMapSize(uint32_t size);
-    void SetSceneAmbient(float r, float g, float b);
-
-    ResourceStore<MeshAssetResource, MeshTag>& GetMeshStore();
-    ResourceStore<MaterialResource, MaterialTag>& GetMatStore();
-    ResourceStore<GDXShaderResource, ShaderTag>& GetShaderStore();
-    ResourceStore<GDXTextureResource, TextureTag>& GetTextureStore();
-
-    RenderTargetHandle CreateRenderTarget(uint32_t w, uint32_t h,
-                                          const std::wstring& name,
-                                          GDXTextureFormat colorFormat = GDXTextureFormat::RGBA8_UNORM);
-
-    TextureHandle GetRenderTargetTexture(RenderTargetHandle h);
-
-    PostProcessHandle CreatePostProcessPass(const PostProcessPassDesc& desc);
-    bool SetPostProcessConstants(PostProcessHandle h, const void* data, uint32_t size);
-    bool SetPostProcessEnabled(PostProcessHandle h, bool enabled);
-    void ClearPostProcessPasses();
-
-    void SetClearColor(float r, float g, float b, float a = 1.0f);
-};
-```
-
-### Responsibilities
-- renderer lifecycle
-- ECS registry access
-- resource creation
-- render targets
-- post-processing
-- per-frame callback execution
-
-### Important functions
-- `SetTickCallback(TickFn fn)` — registers per-frame update code
-- `GetRegistry()` — returns ECS registry
-- `CreateShader(...)` — creates shader resources
-- `LoadTexture(...)` / `CreateTexture(...)` — creates textures
-- `UploadMesh(...)` — uploads a CPU mesh resource
-- `CreateMaterial(...)` — creates a material resource
-- `GetDefaultShader()` — returns default shader handle
-- `SetShadowMapSize(...)` — configures shadow map resolution
-- `SetSceneAmbient(...)` — configures ambient scene light
-- `CreateRenderTarget(...)` — creates an offscreen render target
-- `GetRenderTargetTexture(...)` — returns the texture of a render target
-- `CreatePostProcessPass(...)` — creates a post-process pass
-- `SetPostProcessConstants(...)` — updates post-process constant data
-- `SetPostProcessEnabled(...)` — enables/disables a post-process pass
-- `ClearPostProcessPasses()` — removes all post-process passes
-- `SetClearColor(...)` — sets backbuffer clear color
-
----
-
-## 5. ECS Core
-
-## `Registry`
-
-Main ECS storage.
-
-```cpp
-EntityID CreateEntity();
-void DestroyEntity(EntityID id);
-bool IsAlive(EntityID id) const;
-size_t EntityCount() const;
-
-template<typename T, typename... Args>
-T& Add(EntityID id, Args&&... args);
-
-template<typename T>
-T* Get(EntityID id);
-
-template<typename T>
-bool Has(EntityID id) const;
-
-template<typename T>
-void Remove(EntityID id);
-
-template<typename First, typename... Rest, typename Func>
-void View(Func&& func);
-```
-
-### Functions
-- `CreateEntity()` — creates an entity
-- `DestroyEntity(EntityID id)` — destroys an entity
-- `IsAlive(EntityID id)` — checks whether an entity is valid/alive
-- `EntityCount()` — number of alive entities
-- `Add<T>(...)` — adds a component
-- `Get<T>(...)` — gets a component pointer
-- `Has<T>(...)` — checks whether the entity has a component
-- `Remove<T>(...)` — removes a component
-- `View<...>(func)` — iterates over entities that have the specified components
-
-### Example
-
-```cpp
-Registry& registry = renderer.GetRegistry();
-
-EntityID entity = registry.CreateEntity();
-registry.Add<TagComponent>(entity, TagComponent{"Triangle"});
-```
-
----
-
-## Handle Types
-
-Resource references are handle-based.
-
-```cpp
-using MeshHandle         = Handle<struct MeshTag>;
-using MaterialHandle     = Handle<struct MaterialTag>;
-using ShaderHandle       = Handle<struct ShaderTag>;
-using TextureHandle      = Handle<struct TextureTag>;
-using RenderTargetHandle = Handle<struct RenderTargetTag>;
-using PostProcessHandle  = Handle<struct PostProcessTag>;
-```
-
----
-
-## 6. Important ECS Components
-
-## `TagComponent`
-
-```cpp
-struct TagComponent
-{
-    std::string name;
-};
-```
-
-### Purpose
-Human-readable entity name.
-
----
-
-## `TransformComponent`
+### `TransformComponent`
 
 ```cpp
 struct TransformComponent
 {
-    GIDX::Float3 localPosition;
-    GIDX::Float4 localRotation;
-    GIDX::Float3 localScale;
+    Vec3 localPosition{0,0,0};
+    Quat localRotation = Quat::Identity();
+    Vec3 localScale{1,1,1};
+    bool inheritParentScale = true;
+    bool dirty = true;
+    uint32_t localVersion, worldVersion, parentWorldVersion;
 
-    bool dirty;
-    uint32_t localVersion;
-    uint32_t worldVersion;
-
-    void SetEulerDeg(float pitchDeg, float yawDeg, float rollDeg);
+    void SetEulerDeg(float pitch, float yaw, float roll) noexcept;
+    void RotateLocalEulerDeg(float pitch, float yaw, float roll) noexcept;
+    void RotateWorldEulerDeg(float pitch, float yaw, float roll) noexcept;
 };
 ```
 
-### Purpose
-Stores local transform.
-
-### Important function
-- `SetEulerDeg(...)` — sets local rotation from Euler angles in degrees
-
----
-
-## `WorldTransformComponent`
+### `WorldTransformComponent`
 
 ```cpp
 struct WorldTransformComponent
 {
-    GIDX::Float4x4 matrix;
-    GIDX::Float4x4 inverse;
+    Vec3 position{0,0,0};
+    Quat rotation = Quat::Identity();
+    Vec3 scale{1,1,1};
+    Mat4 matrix  = Mat4::Identity();
+    Mat4 inverse = Mat4::Identity();
 };
 ```
 
-### Purpose
-Stores calculated world transform and inverse.
+### `BoundsComponent`
 
----
-
-## `RenderableComponent`
+Local + world AABB and bounding sphere used by visibility/culling.
 
 ```cpp
-struct RenderableComponent
+struct BoundsComponent
 {
-    MeshHandle mesh;
-    MaterialHandle material;
-    uint32_t submeshIndex = 0u;
-    bool enabled = true;
-
-    bool dirty = true;
-    uint32_t stateVersion = 1u;
+    Vec3  centerLocal{0,0,0},  extentsLocal{1,1,1};
+    Vec3  centerWorld{0,0,0},  extentsWorld{1,1,1};
+    float boundingSphere = 1.f;
+    uint32_t lastTransformVersion = 0u;
+    bool  localDirty = true;
 };
 ```
 
-### Purpose
-Connects an entity to render resources.
+Other core components: `ParentComponent`, `ChildrenComponent`, `NameComponent`,
+`GuidComponent`, `OBBComponent`, `ActiveComponent`, `TagComponent`.
 
 ---
 
-## `VisibilityComponent`
+## 8. Render Components (AddOns)
+
+### `MeshComponent` (`engine`, mesh_renderer AddOn)
 
 ```cpp
-struct VisibilityComponent
+struct MeshComponent
 {
-    bool visible = true;
-    bool active = true;
-    uint32_t layerMask = 0x00000001u;
-    bool castShadows = true;
-    bool receiveShadows = true;
-
-    bool dirty = true;
-    uint32_t stateVersion = 1u;
+    MeshHandle  mesh;
+    bool        visible        = true;
+    bool        castShadows    = true;
+    bool        receiveShadows = true;
+    uint32_t    layerMask      = renderer::LAYER_DEFAULT;
+    std::string meshAssetPath;   // "model.glb#mesh/<i>" or "mesh.kmesh"
 };
 ```
 
-### Purpose
-Controls render visibility, activity, layers, and shadow behavior.
+### `MaterialComponent` (`engine`, mesh_renderer AddOn)
 
----
+Supports an entity-wide material plus per-submesh slot overrides.
 
-## `RenderBoundsComponent`
+```cpp
+struct MaterialComponent
+{
+    struct SlotOverride { uint32_t submeshIndex; MaterialHandle material; std::string materialAssetPath; };
 
-### Purpose
-Local bounds used for culling.
+    MaterialHandle material;            // entity-wide
+    uint32_t       submeshIndex = 0u;
+    std::string    materialAssetPath;
+    std::string    baseColorTexturePath;
+    std::vector<SlotOverride> slotOverrides;
 
----
+    const SlotOverride* FindSlotOverride(uint32_t index) const noexcept;
+};
+```
 
-## `CameraComponent`
+### `CameraComponent` (`engine`, camera AddOn)
 
 ```cpp
 struct CameraComponent
 {
-    float fovDeg = 60.0f;
-    float nearPlane = 0.1f;
-    float farPlane = 1000.0f;
-    float aspectRatio = 16.0f / 9.0f;
-
-    bool  isOrtho = false;
-    float orthoWidth = 10.0f;
-    float orthoHeight = 10.0f;
-
-    uint32_t cullMask = 0xFFFFFFFFu;
+    ProjectionType projection   = ProjectionType::Perspective; // or Orthographic
+    float fovYDeg   = 60.f, nearPlane = 0.1f, farPlane = 1000.f;
+    float orthoSize = 10.f, aspectRatio = 16.f/9.f;
+    uint32_t cullingMask = /* all except editor-gizmo layers */;
+    bool isMainCamera = false;
+    BackgroundMode backgroundMode = BackgroundMode::ClearColor;
+    std::array<float,4> clearColor = {0,0,0,1};
 };
 ```
 
-### Purpose
-Defines camera projection and culling mask.
+> Cameras do not render themselves. The camera AddOn builds a `RenderView` (§9) from a
+> camera entity; the `RenderView` is what `Tick` consumes.
 
----
-
-## `ActiveCameraTag`
+### `LightComponent` (`engine`, lighting AddOn)
 
 ```cpp
-struct ActiveCameraTag {};
-```
+enum class LightType : uint8_t { Directional, Point, Spot };
 
-### Purpose
-Marks the active main camera.
-
----
-
-## `RenderTargetCameraComponent`
-
-### Purpose
-Marks a camera that renders into an offscreen render target.
-
----
-
-## `LightComponent`
-
-```cpp
 struct LightComponent
 {
-    LightKind kind = LightKind::Directional;
-    GIDX::Float4 diffuseColor = { 1,1,1,1 };
-
-    float radius = 10.0f;
-    float intensity = 1.0f;
-
-    float innerConeAngle = 15.0f;
-    float outerConeAngle = 30.0f;
-
-    bool  castShadows = false;
-    float shadowOrthoSize = 50.0f;
-    float shadowNear = 0.1f;
-    float shadowFar = 1000.0f;
-
-    uint32_t affectLayerMask = 0xFFFFFFFFu;
-    uint32_t shadowLayerMask = 0xFFFFFFFFu;
+    LightType  type        = LightType::Point;
+    Vec3       color       {1,1,1};
+    float      intensity   = 1.f;
+    float      range       = 10.f;
+    float      spotInnerDeg = 15.f, spotOuterDeg = 30.f;
+    bool       castShadows = false;
+    uint32_t   layerMask   = 0xFFFFFFFFu;
+    ShadowSettings shadowSettings;
 };
 ```
 
-### Purpose
-Defines directional, point, or spot light data.
-
 ---
 
-## 7. Mesh Data
+## 9. `renderer::RenderView`
 
-## `SubmeshData`
+A plain per-frame value type describing the active view. Fill it directly, or let the
+camera AddOn produce it from a camera entity.
 
 ```cpp
-struct SubmeshData
+struct RenderView
 {
-    std::vector<GIDX::Float3> positions;
-    std::vector<GIDX::Float3> normals;
-    std::vector<GIDX::Float2> uv0;
-    std::vector<GIDX::Float2> uv1;
-    std::vector<GIDX::Float4> tangents;
-    std::vector<GIDX::Float4> colors;
-    std::vector<uint32_t>     indices;
-
-    std::vector<GIDX::UInt4>  boneIndices;
-    std::vector<GIDX::Float4> boneWeights;
-
-    uint32_t VertexCount() const noexcept;
-    uint32_t IndexCount() const noexcept;
-    bool HasNormals() const noexcept;
-    bool HasUV0() const noexcept;
-    bool HasUV1() const noexcept;
-    bool HasTangents() const noexcept;
-    bool HasSkinning() const noexcept;
-    bool IsEmpty() const noexcept;
-    uint32_t ComputeVertexFlags() const noexcept;
+    Mat4 view = Mat4::Identity();
+    Mat4 projection = Mat4::Identity();
+    Vec3 cameraPosition{0,0,0};
+    Vec3 cameraForward{0,0,1};
+    Vec3 ambientColor{0.03f,0.03f,0.03f};
+    float ambientIntensity = 1.f;
+    float nearPlane = 0.1f, farPlane = 1000.f;
+    uint32_t debugFlags = 0u;
+    uint32_t visibilityLayerMask = LAYER_ALL;
+    uint32_t lightLayerMask      = LAYER_ALL;
+    BackgroundMode backgroundMode = BackgroundMode::ClearColor;
+    bool enableBloom = true;
+    bool enableShadows = true;
+    bool enableAmbientOcclusion = true;
+    std::array<float,4> clearColor{0.3f,0.3f,0.3f,1.f};
 };
 ```
 
-### Purpose
-CPU-side geometry for one submesh.
-
-### Rules
-- `positions` must be filled
-- `indices` may be empty for non-indexed meshes
-- optional arrays must match vertex count if used
-
 ---
 
-## `MeshAssetResource`
+## 10. Mesh Data (`engine::assets`)
+
+CPU-side geometry uses **flat float arrays** (not vectors of vec3).
 
 ```cpp
-struct MeshAssetResource
+struct SubMeshData
 {
-    std::vector<SubmeshData>   submeshes;
-    std::vector<GpuMeshBuffer> gpuBuffers;
+    std::vector<float>    positions;  // 3 floats per vertex
+    std::vector<float>    normals;    // 3 floats
+    std::vector<float>    tangents;   // 4 floats (xyz + handedness)
+    std::vector<float>    uvs;        // 2 floats
+    std::vector<float>    colors;     // 4 floats (RGBA)
+    std::vector<uint32_t> indices;
+    std::vector<float>    boneWeights; // 4 floats
+    std::vector<uint32_t> boneIndices; // 4 uints
+    uint32_t              materialIndex = 0u;
 
-    std::string debugName;
-    bool gpuReady = false;
-
-    uint32_t SubmeshCount() const noexcept;
-    bool IsEmpty() const noexcept;
-    void AddSubmesh(SubmeshData data);
-    bool IsGpuReadyAt(uint32_t i) const noexcept;
+    std::vector<uint8_t>  rawInterleavedBytes; // optional .kmesh fast path
+    uint32_t              rawVertexStride = 0u;
 };
-```
 
-### Purpose
-Top-level mesh resource containing one or more submeshes.
-
-### Important function
-- `AddSubmesh(SubmeshData data)` — appends a submesh before upload
-
----
-
-## 8. Material Data
-
-## `MaterialData`
-
-```cpp
-struct MaterialData
+struct MeshAsset : AssetBase
 {
-    GIDX::Float4 baseColor;
-    GIDX::Float4 specularColor;
-    GIDX::Float4 emissiveColor;
-    GIDX::Float4 uvTilingOffset;
-    GIDX::Float4 uvDetailTilingOffset;
-    float metallic;
-    float roughness;
-    float normalScale;
-    float occlusionStrength;
-    float shininess;
-    float transparency;
-    float alphaCutoff;
-    float receiveShadows;
-    float blendMode;
-    float blendFactor;
-    uint32_t flags;
+    std::vector<SubMeshData>    submeshes;
+    std::vector<MaterialHandle> materialHandles; // index == SubMeshData::materialIndex
+    GpuUploadStatus gpuStatus{};
+    void ComputeBounds(Vec3& outMin, Vec3& outMax) const;
 };
 ```
 
-### Purpose
-Numeric material parameters for shading.
+CPU assets (`MeshAsset`, texture assets) live in the `AssetRegistry`; GPU upload is
+handled separately by the backend runtime. Loading and importing go through the
+**asset pipeline**, not direct renderer calls — see §10.1.
 
----
+### 10.1 `assets::AssetPipeline`
 
-## `MaterialResource`
+Connects the asset registry, filesystem, shader-compile path, and GPU upload. You give
+it a registry, a device (for upload), and optionally a filesystem; then set the asset
+root and register importers.
 
 ```cpp
-class MaterialResource
+class AssetPipeline
 {
 public:
-    MaterialData data;
-    ShaderHandle shader;
+    AssetPipeline(AssetRegistry& registry,
+                  renderer::IDevice* device = nullptr,
+                  platform::IFilesystem* fs = nullptr);
 
-    MaterialTextureLayerArray textureLayers{};
+    void SetAssetRoot(const std::filesystem::path& root);
 
-    uint32_t sortID = 0u;
-    void* gpuConstantBuffer = nullptr;
-    bool  cpuDirty = true;
-    MaterialShadowCullMode shadowCullMode = MaterialShadowCullMode::Auto;
+    // Importers are format-agnostic; ImportBundle() picks by extension.
+    void RegisterMeshImporter(std::unique_ptr<IAssetImporter> importer);
+    ImportedAssetBundle ImportBundle(const std::string& path);   // .glb/.fbx/.obj/.usd...
 
-    bool IsTransparent() const noexcept;
-    bool IsAlphaTest() const noexcept;
-    bool IsDoubleSided() const noexcept;
-    bool IsUnlit() const noexcept;
-    bool UsesPBR() const noexcept;
-    bool UsesDetailMap() const noexcept;
+    MeshHandle     LoadMesh(const std::string& path);
+    TextureHandle  LoadTexture(const std::string& path);
+    ShaderHandle   LoadShader(const std::string& path,
+                              ShaderStage fallbackStage = ShaderStage::Vertex);
+    MaterialHandle LoadMaterial(const std::string& path);
+    bool           LoadScene(const std::string& path, Scene& scene);
 
-    void SetShadowCullMode(MaterialShadowCullMode mode) noexcept;
-    void SetFlag(MaterialFlags f, bool on) noexcept;
+    void PollHotReload();             // re-import changed source files
+    void BuildPendingShaderCaches();  // compile queued shaders
+    void UploadPendingGpuAssets();    // push CPU assets to the GPU
 
-    MaterialTextureLayer& Layer(MaterialTextureSlot slot) noexcept;
-    const MaterialTextureLayer& Layer(MaterialTextureSlot slot) const noexcept;
-
-    void SetTexture(MaterialTextureSlot slot, TextureHandle texture,
-                    MaterialTextureUVSet uvSet = MaterialTextureUVSet::Auto) noexcept;
-
-    void ClearTexture(MaterialTextureSlot slot) noexcept;
-    bool HasTexture(MaterialTextureSlot slot) const noexcept;
-    TextureHandle GetTexture(MaterialTextureSlot slot) const noexcept;
-
-    void NormalizeTextureLayers() noexcept;
-    void SetDetailTiling(float tilingX, float tilingY,
-                         float offsetX = 0.0f, float offsetY = 0.0f) noexcept;
-    void SetDetailBlendMode(MaterialTextureBlendMode mode) noexcept;
-    MaterialTextureBlendMode GetDetailBlendMode() const noexcept;
-    void SetDetailBlendFactor(float factor) noexcept;
-
-    static MaterialResource FlatColor(float r, float g, float b, float a = 1.0f);
+    TextureHandle GetGpuTexture(TextureHandle) const noexcept;
+    ShaderHandle  GetGpuShader(ShaderHandle) const noexcept;
 };
 ```
 
-### Important functions
-- `SetFlag(...)` — enables/disables material features
-- `SetTexture(...)` — assigns a texture to a slot
-- `ClearTexture(...)` — removes a texture
-- `HasTexture(...)` / `GetTexture(...)` — query assigned textures
-- `SetDetailTiling(...)` — set detail UV transform
-- `SetDetailBlendMode(...)` / `SetDetailBlendFactor(...)` — detail map blending
-- `FlatColor(...)` — helper for simple flat-color setup
+### Typical asset setup
 
-### Example flags
-- `MF_ALPHA_TEST`
-- `MF_DOUBLE_SIDED`
-- `MF_UNLIT`
-- `MF_USE_NORMAL_MAP`
-- `MF_USE_ORM_MAP`
-- `MF_USE_EMISSIVE`
-- `MF_TRANSPARENT`
-- `MF_SHADING_PBR`
-- `MF_USE_DETAIL_MAP`
+```cpp
+assets::AssetRegistry registry;
+assets::AssetPipeline pipeline(registry, loop.GetRenderSystem().GetDevice());
+pipeline.SetAssetRoot("assets/");
+pipeline.RegisterMeshImporter(std::make_unique<addons::gltf::GltfImporter>());
+
+MeshHandle    mesh = pipeline.LoadMesh("models/cube.glb");
+TextureHandle tex  = pipeline.LoadTexture("textures/albedo.png");
+
+pipeline.BuildPendingShaderCaches();
+pipeline.UploadPendingGpuAssets();   // before the first frame that uses them
+```
+
+> Hand the registry to the renderer with `loop.GetRenderSystem().SetAssetRegistry(&registry)`
+> so shader and environment resolution can see it. `glTF`/`.glb` import is provided by the
+> `engine::addons::gltf::GltfImporter` AddOn.
 
 ---
 
-## 9. Resource Creation Examples
+## 11. Materials (`engine::renderer` + material AddOns)
 
-### Shader
+Materials live in a `MaterialSystem`. The ergonomic path is the material AddOns
+(Unlit / Lit / PBR); the low-level path is `MaterialRuntimeBridge::RegisterMaterial`.
+
+### Unlit
 
 ```cpp
-ShaderHandle shader = renderer.CreateShader(
-    L"shader/ECSVertexShader.hlsl",
-    L"shader/ECSPixelShader.hlsl",
-    GDX_VERTEX_DEFAULT);
+MaterialSystem ms;
+unlit::UnlitMaterialCreateInfo info{};
+info.name = "UnlitTest";
+info.vertexShader   = vs;
+info.fragmentShader = fs;
+info.enableEmissiveMap = true;
+info.alphaTest = true;
+
+unlit::UnlitMaterial mat = unlit::UnlitMaterial::Create(ms, info);
+mat.SetBaseColorFactor({0.8f, 0.7f, 0.6f, 1.f});
+mat.SetAlbedo(albedoTexture);
+MaterialHandle handle = mat.Handle();
 ```
 
-### Texture from file
+### Lit
 
 ```cpp
-TextureHandle tex = renderer.LoadTexture(L"assets/albedo.png", true);
+lit::LitMaterialCreateInfo info{};
+info.name = "LitTest";
+info.vertexShader = vs; info.fragmentShader = fs; info.shadowShader = shadowVs;
+info.specularStrength = 0.6f; info.roughnessFactor = 0.2f;
+lit::LitMaterial mat = lit::LitMaterial::Create(ms, info);
 ```
 
-### Texture from CPU image
+### PBR (master + cached instance permutations)
 
 ```cpp
-TextureHandle tex = renderer.CreateTexture(imageBuffer, L"GeneratedTexture", true);
+pbr::PbrMasterMaterial::Config config{};
+config.vs = vs; config.fs = fs; config.shadow = shadowVs;
+config.vertexLayout = layout;
+
+pbr::PbrMasterMaterial master = pbr::PbrMasterMaterial::Create(ms, config);
+
+MaterialHandle inst = master.CreateInstance("Inst")
+    .BaseColor(albedoTex)
+    .Normal(normalTex)
+    .Emissive(emissiveTex)
+    .Roughness(0.15f)
+    .Metallic(0.9f)
+    .IBL(true)
+    .Build();
 ```
 
-### Mesh
+Material descriptors carry feature flags (`MaterialFeatureFlags::PbrMetalRough`,
+`BaseColorMap`, `NormalMap`, `EmissiveMap`, `IblMap`, `AlphaTest`, `Unlit`, …) and a
+render policy (cull mode, double-sided). `doubleSided = true` overrides the cull mode to
+`None`.
+
+### Low-level registration
 
 ```cpp
-MeshAssetResource mesh = /* build mesh data */;
-MeshHandle meshHandle = renderer.UploadMesh(std::move(mesh));
-```
-
-### Material
-
-```cpp
-MaterialResource mat{};
-MaterialHandle matHandle = renderer.CreateMaterial(std::move(mat));
-```
-
----
-
-## 10. Render Targets and Post-Processing
-
-### Create render target
-
-```cpp
-RenderTargetHandle rt = renderer.CreateRenderTarget(
-    1024,
-    1024,
-    L"OffscreenColor",
-    GDXTextureFormat::RGBA8_UNORM);
-```
-
-### Get render target texture
-
-```cpp
-TextureHandle rtTexture = renderer.GetRenderTargetTexture(rt);
-```
-
-### Create post-process pass
-
-```cpp
-PostProcessPassDesc desc{};
-PostProcessHandle pp = renderer.CreatePostProcessPass(desc);
-```
-
-### Set constants
-
-```cpp
-renderer.SetPostProcessConstants(pp, &myData, sizeof(myData));
-```
-
-### Enable/disable
-
-```cpp
-renderer.SetPostProcessEnabled(pp, true);
-```
-
-### Clear all passes
-
-```cpp
-renderer.ClearPostProcessPasses();
+MaterialDesc desc; desc.name = "LoopMat";
+MaterialRuntimeDesc runtime;
+runtime.renderPass     = StandardRenderPasses::Opaque();
+runtime.vertexShader   = vs;
+runtime.fragmentShader = fs;
+MaterialHandle h = MaterialRuntimeBridge::RegisterMaterial(ms, std::move(desc), runtime);
 ```
 
 ---
 
-## 11. Minimal Initialization Example
+## 12. Post-Processing, Offscreen Rendering, and Environment
+
+KROM has **no** generic "create post-process pass" API. Post effects are either stages
+of the standard forward frame (bloom, tonemap) or dedicated AddOns (GTAO, outline),
+toggled per view.
+
+### Bloom / Tonemap
+
+Built into the standard forward recipe.
+
+- `RenderView::enableBloom` turns bloom on/off for that view.
+- Tonemapping runs as the final fullscreen pass. Supply a passthrough tonemap material
+  once before the first frame:
 
 ```cpp
-int main()
+loop.GetRenderSystem().SetDefaultTonemapMaterial(tonemapMat, materials);
+```
+
+  (A fullscreen passthrough shader: no vertex buffer, no depth test. If you instead set
+  an `onTonemap` frame callback, that takes precedence.)
+
+### GTAO ambient occlusion
+
+```cpp
+std::shared_ptr<gtao::GtaoGpuResources> gtaoResources;
+rs.RegisterFeature(renderer::addons::gtao::CreateGtaoFeature(&gtaoResources));
+// gtaoResources lets you tweak GTAO settings at runtime
+```
+
+Gated per view by `RenderView::enableAmbientOcclusion`.
+
+### Outline (editor selection)
+
+```cpp
+rs.RegisterFeature(renderer::addons::outline::CreateOutlineFeature(
+    /* getSelected      */ [&]{ return selectedEntity; },
+    /* shouldOutline    */ [&](EntityID e){ return IsSelectable(e); }));
+```
+
+Renders nothing when no entity is selected. HLSL backends only (disabled on OpenGL).
+
+### Offscreen rendering (render-to-texture)
+
+Use the second `Tick` overload with one or more `OffscreenRenderRequest`s. Each request
+renders the world from its own `RenderView` into a render target you allocated from the
+device.
+
+```cpp
+struct OffscreenRenderRequest
 {
-    GDXEventQueue events;
+    const RenderView*  view = nullptr;
+    RenderTargetHandle outputRT;
+    TextureHandle      outputTex;
+    uint32_t           viewportWidth = 0u;
+    uint32_t           viewportHeight = 0u;
+    const FramePipelineCallbacks* callbacks = nullptr;
+};
 
-    WindowDesc desc{};
-    desc.width = 1280;
-    desc.height = 720;
-    desc.title = "GIDX Demo";
+// Allocate the target via the device (renderer::IDevice::CreateRenderTarget),
+// then pass a span of requests:
+OffscreenRenderRequest req{};
+req.view = &previewView;
+req.outputRT = previewRT;
+req.viewportWidth = 512u; req.viewportHeight = 512u;
 
-    auto window = std::make_unique<GDXWin32Window>(desc, events);
-    window->Create();
+const OffscreenRenderRequest requests[] = { req };
+loop.Tick(world, materials, mainView, timing, callbacks, requests);
+```
 
-    auto adapters = GDXWin32DX11ContextFactory::EnumerateAdapters();
-    if (adapters.empty())
-        return 1;
+### Environment / IBL
 
-    unsigned int bestAdapter = GDXWin32DX11ContextFactory::FindBestAdapter(adapters);
+Image-based lighting is managed by the render system, not a per-frame view field.
 
-    GDXWin32DX11ContextFactory factory;
-    auto dxContext = factory.Create(*window, bestAdapter);
-    if (!dxContext)
-        return 1;
+```cpp
+EnvironmentHandle env = rs.CreateEnvironment(envDesc);
+rs.SetActiveEnvironment(env);
+// ...
+rs.DestroyEnvironment(env);
+```
 
-    auto backend = std::make_unique<GDXDX11RenderBackend>(std::move(dxContext));
-    auto renderer = std::make_unique<GDXECSRenderer>(std::move(backend));
+Materials opt into IBL through their feature flags (e.g. PBR `.IBL(true)`, §11).
 
-    GIDXEngine engine(std::move(window), std::move(renderer), events);
+---
 
-    if (!engine.Initialize())
-        return 1;
+## 13. Minimal Initialization Example
 
-    engine.Run();
-    engine.Shutdown();
-    return 0;
-}
+This mirrors the engine's own end-to-end path (see `tests/test_renderer.cpp`).
+
+```cpp
+using namespace engine;
+
+// 1. Components.
+ecs::ComponentMetaRegistry registry;
+RegisterCoreComponents(registry);
+addons::mesh_renderer::RegisterMeshRendererComponents(registry);
+addons::camera::RegisterCameraComponents(registry);
+addons::lighting::RegisterLightingComponents(registry);
+
+// 2. Loop + render features (before Initialize).
+renderer::PlatformRenderLoop loop;
+auto& rs = loop.GetRenderSystem();
+rs.RegisterFeature(addons::mesh_renderer::CreateMeshRendererFeature());
+rs.RegisterFeature(addons::lighting::CreateLightingFeature());
+rs.RegisterFeature(renderer::addons::forward::CreateForwardFeature());
+
+// 3. Window + device, then initialize.
+platform::WindowDesc desc{};
+desc.width = 1280u; desc.height = 720u; desc.title = "KROM";
+
+renderer::IDevice::DeviceDesc deviceDesc{};
+deviceDesc.enableDebugLayer = true;
+loop.Initialize(renderer::DeviceFactory::BackendType::DirectX11, platform, desc, &bus, deviceDesc);
+
+// 4. World + material.
+ecs::World world(registry);
+renderer::MaterialSystem materials;
+// ... register/create a material, obtain MaterialHandle `mat` ...
+
+// 5. A renderable entity.
+EntityID e = world.CreateEntity();
+world.Add<TransformComponent>(e);
+world.Add<WorldTransformComponent>(e);
+world.Add<MeshComponent>(e, MeshComponent{meshHandle});
+world.Add<MaterialComponent>(e, MaterialComponent{mat});
+world.Add<BoundsComponent>(e, BoundsComponent{
+    .centerWorld={0,0,0}, .extentsWorld={0.5f,0.5f,0.5f}, .boundingSphere=0.87f});
+
+// 6. View + frame loop.
+renderer::RenderView view{};
+view.view           = Mat4::LookAtRH({0,0,-5}, {0,0,0}, Vec3::Up());
+view.projection     = Mat4::PerspectiveFovRH(60.f * math::DEG_TO_RAD, 16.f/9.f, 0.1f, 100.f);
+view.cameraPosition = {0,0,-5};
+
+platform::StdTiming timing;
+while (!loop.ShouldExit())
+    loop.Tick(world, materials, view, timing);
+
+loop.Shutdown();
 ```
 
 ---
 
-## 12. Minimal ECS Render Path
+## 14. Minimal ECS Render Path
 
-For a visible renderable entity you typically need:
-
-- `TransformComponent`
-- `WorldTransformComponent`
-- `RenderableComponent`
-- `VisibilityComponent`
-- `RenderBoundsComponent`
-
-For an active camera:
+For a visible renderable entity you need (core + mesh_renderer components):
 
 - `TransformComponent`
 - `WorldTransformComponent`
-- `CameraComponent`
-- `ActiveCameraTag`
+- `MeshComponent` (with a valid `MeshHandle`)
+- `MaterialComponent` (with a valid `MaterialHandle`)
+- `BoundsComponent`
+
+For the active view, either:
+
+- fill a `RenderView` by hand (matrices + camera position/forward), **or**
+- create a camera entity (`TransformComponent`, `WorldTransformComponent`,
+  `CameraComponent` with `isMainCamera = true`) and let the camera AddOn build the
+  `RenderView`.
+
+And — required for anything to appear — the matching **component metas** and **render
+features** must be registered before `Initialize` (§5, §6).
