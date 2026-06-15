@@ -1,6 +1,6 @@
 ---
 title: IBL Sphere
-image: assets/helloworld.png
+image: assets/sphere.png
 download: files/ibl_sphere.cpp
 downloadLabel: Download
 ---
