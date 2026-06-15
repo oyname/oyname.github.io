@@ -1,6 +1,6 @@
 ---
 title: Textured Cube
-image: assets/trinagle.png
+image: assets/qube.png
 download: files/textured_cube.cpp
 downloadLabel: Download
 ---
