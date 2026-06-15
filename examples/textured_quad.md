@@ -1,6 +1,6 @@
 ---
 title: Textured Quad
-image: assets/trinagle.png
+image: assets/quad.png
 download: files/textured_quad.cpp
 downloadLabel: Download
 ---
