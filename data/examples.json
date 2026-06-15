@@ -1,6 +1,8 @@
 [
   { "file": "examples/adapter_enum.md" },
-  { "file": "examples/hello_window.md" },
-  { "file": "examples/triangle.md" },
-  { "file": "examples/rotating_cube.md" }
+  { "file": "examples/minimal_window.md" },
+  { "file": "examples/textured_quad.md" },
+  { "file": "examples/textured_cube.md" },
+  { "file": "examples/load_3d_model.md" },
+  { "file": "examples/ibl_sphere.md" }
 ]
