@@ -1,6 +1,6 @@
 ---
 title: Load 3D Model
-image: assets/helloworld.png
+image: assets/3dmodel.png
 download: files/load_3d_model.cpp
 downloadLabel: Download
 ---
