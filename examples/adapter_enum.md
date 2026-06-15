@@ -4,6 +4,6 @@ image: assets/helloworld.png
 download: files/adapter_enum.cpp
 downloadLabel: Download
 ---
-Enumerate all available GPU adapters and select the best one using `DeviceFactory`. No window or renderer required — useful as a diagnostic tool and as a starting point for any application that needs to pick a specific adapter.
+List every GPU adapter for each available renderer backend (DX11, DX12, OpenGL, Vulkan) using the high-level `Krom::` API. No window or renderer is created — useful as a diagnostic tool and as a starting point for picking a specific GPU.
 
-Covers `DeviceFactory::EnumerateAdapters`, `FindBestAdapter`, and the `AdapterInfo` struct.
+Covers `Krom::IsRendererAvailable`, `Krom::EnumerateAdapters`, `Krom::RendererName`, and the adapter fields (`index`, `name`, `isDiscrete`, `dedicatedVRAM`, `featureLevel`). The example simply prints all adapters per backend; it does not auto-select one.
