@@ -1,6 +1,6 @@
 ---
 title: Minimal Window
-image: assets/helloworld.png
+image: assets/window.png
 download: files/minimal_window.cpp
 downloadLabel: Download
 ---
