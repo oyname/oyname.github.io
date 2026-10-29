@@ -1,830 +1,471 @@
-# KROM ENGINE API REFERENCE
+# KROM ENGINE API OVERVIEW
 
-This reference describes how to use the KROM ENGINE API.
+This document provides a high-level overview of how to use the KROM ENGINE API.
 
-The focus is on the direct engine path:
-- engine initialization and the frame loop
-- platform window and input
-- backend selection (DX11 / DX12 / OpenGL / Vulkan)
-- render features / AddOns
-- ECS usage
-- mesh and material setup
+It focuses on the practical engine path, the main objects you interact with, and the minimal steps required to get a scene on screen.
 
-For architecture and high-level usage flow, see the API Overview.
+This document is intentionally usage-oriented.
+For architectural structure, see the Architecture document.
+For exact types, methods, fields, and function behavior, see the API Reference.
 
-> **Conventions.** Code samples assume `using namespace engine;`. Fully qualified,
-> the types live in `engine::platform` (window/input), `engine::renderer`
-> (`PlatformRenderLoop`, `RenderSystem`, `MaterialSystem`, `RenderView`,
-> `DeviceFactory`), `engine::ecs` (`World`, `ComponentMetaRegistry`), `engine`
-> (core components, `Scene`), and the AddOns under `engine::addons::*` /
-> `engine::renderer::addons::*`.
+> **Note on namespaces.** The code samples below assume `using namespace engine;` for
+> readability. Fully qualified, the main objects live in `engine::renderer`
+> (`PlatformRenderLoop`, `MaterialSystem`, `RenderView`), `engine::ecs` (`World`,
+> `ComponentMetaRegistry`), and `engine` (`Scene`).
 >
-> All signatures below are taken from the current headers. Where a subsystem is only
-> summarized (asset loading), that is called out explicitly rather than invented.
+> Component registration functions (`RegisterCoreComponents`,
+> `RegisterMeshRendererComponents`, `RegisterCameraComponents`,
+> `RegisterLightingComponents`) live directly in `engine`.
+> Feature factories and AddOn helpers live under `engine::addons::*`
+> (mesh renderer, lighting, camera view builder) and `engine::renderer::addons::*`
+> (forward pipeline).
 
 ---
 
-## 1. Window and Platform
+## Practical Usage Flow
 
-KROM does not expose a single Win32 window class. Windowing goes through a
-platform-neutral abstraction (`IPlatform` creates an `IWindow`); concrete platforms
-are Win32, GLFW/Linux, and a headless platform for tests.
+The following diagram shows the practical user-facing path from initialization to the per-frame loop.
 
-### `platform::WindowDesc`
-
-Configures the window and (optionally) the OpenGL context hints.
-
-```cpp
-struct WindowDesc
-{
-    uint32_t    width             = 1280u;
-    uint32_t    height            = 720u;
-    bool        visible           = true;
-    bool        resizable         = true;
-    WindowMode  windowMode        = WindowMode::Windowed;
-    uint32_t    framebufferWidth  = 1280u;
-    uint32_t    framebufferHeight = 720u;
-    std::string title             = "KROM Engine";
-
-    bool openglContext      = false;   // OpenGL backend only
-    int  openglMajor        = 4;
-    int  openglMinor        = 1;
-    bool openglDebugContext = false;
-
-    bool vsync = true;
-};
-
-enum class WindowMode { Windowed, Maximized, BorderlessWindowed, Fullscreen };
+```text
+Register Components (ComponentMetaRegistry)
+  -> Register Render Features / AddOns (RenderSystem)
+      -> Initialize PlatformRenderLoop
+          -> Create ecs::World (with the registry)
+              -> Create Scene
+                  -> Create MaterialSystem
+                      -> Create Camera + Renderable Entities
+                          -> Build a RenderView (by hand or via the camera AddOn)
+                              -> Update ECS State
+                                  -> loop.Tick(world, materials, view, timing)
+                                      -> Update ECS State
+                                      -> loop.Tick(...)
 ```
 
-### `platform::IWindow`
+The short version is:
 
-Platform-neutral window interface.
+1. register the component metas you will use
+2. register the render features / AddOns you need
+3. initialize the runtime
+4. create the ECS world (passing the registry) and scene
+5. set up materials, camera and renderable entities
+6. produce a `RenderView` and call `Tick(...)` every frame
 
-```cpp
-class IWindow
-{
-public:
-    virtual bool             Create(const WindowDesc& desc) = 0;
-    virtual void             Destroy() = 0;
-    virtual WindowEventState PumpEvents(IInput& input) = 0;
-
-    virtual bool        IsOpen() const = 0;
-    virtual bool        ShouldClose() const;        // default: !IsOpen()
-    virtual void        RequestClose() = 0;
-    virtual void        Resize(uint32_t width, uint32_t height) = 0;
-    virtual void        SetTitle(const char* title);
-
-    virtual void*       GetNativeHandle() const = 0; // HWND / GLFWwindow*
-    virtual uint32_t    GetWidth() const = 0;
-    virtual uint32_t    GetHeight() const = 0;
-    virtual uint32_t    GetFramebufferWidth() const;
-    virtual uint32_t    GetFramebufferHeight() const;
-    virtual float       GetDPIScale() const;
-    virtual const char* GetBackendName() const = 0;
-    virtual std::vector<std::filesystem::path> ConsumeDroppedFiles();
-};
-```
-
-> `PumpEvents(IInput&)` both processes OS messages and feeds key/mouse events into the
-> supplied input object. It returns a `WindowEventState` (quit requested, resized, new
-> size). In normal use you do **not** drive `IWindow` directly —
-> `PlatformRenderLoop::Tick` pumps events for you.
-
-### `platform::IPlatform`
-
-Owns platform initialization, the window factory, input, threading, and timing.
-
-```cpp
-class IPlatform
-{
-public:
-    virtual bool             Initialize() = 0;
-    virtual void             Shutdown() = 0;
-    virtual void             PumpEvents() = 0;
-    virtual double           GetTimeSeconds() const = 0;
-    virtual IWindow*         CreateWindow(const WindowDesc& desc) = 0;
-    virtual IInput*          GetInput() = 0;
-    virtual IThreadFactory*  GetThreadFactory() = 0;
-    virtual void             GetPrimaryMonitorSize(uint32_t& w, uint32_t& h) const;
-};
-```
-
-You pass an `IPlatform&` into `PlatformRenderLoop::Initialize`; the loop creates the
-window through it.
+> **Why steps 1 and 2 come first.** KROM is AddOn-based. The renderer extracts and
+> renders **only** what registered features and component metas describe. Skip them and
+> `Tick(...)` runs successfully but produces an empty frame.
 
 ---
 
-## 2. Input
+## 1. Purpose
 
-KROM input is **instance-based** (no global/static input state). You obtain the active
-`IInput` from the platform, or via `loop.GetInput()`.
+This document answers one practical question:
 
-### `platform::Key` / `platform::MouseButton`
+**How do you use the engine to create a window, set up rendering, build a scene, and run frames?**
 
-```cpp
-enum class Key : uint16_t {
-    Unknown, Escape, Space, Enter, Tab, Backspace,
-    LeftShift, RightShift, LeftCtrl, RightCtrl, LeftAlt, RightAlt,
-    Left, Right, Up, Down,
-    Home, End, PageUp, PageDown, Insert, Delete,
-    A, B, /* ... */ Z,
-    Num0, /* ... */ Num9,
-    Plus, Minus, Equals,
-    F1, /* ... */ F12,
-    Count
-};
+KROM can be approached in two ways:
 
-enum class MouseButton : uint8_t { Left, Right, Middle, X1, X2, Count };
-```
+1. **Direct engine path**
+   - explicit setup of platform, window and renderer
+   - explicit component and feature/AddOn registration
+   - direct access to ECS world, scene data and rendering flow
+   - intended for real engine usage, custom setup and advanced work
 
-### `platform::IInput`
+2. **Simplified entry path**
+   - the `Krom::` wrapper (see `KromWrapper`) wraps common setup steps,
+     including component and feature registration
+   - reduces boilerplate
+   - intended for quick demos and onboarding
 
-```cpp
-class IInput
-{
-public:
-    virtual void BeginFrame() = 0;   // once per frame, before queries
-
-    // Fed by the windowing layer:
-    virtual void OnKeyEvent(const InputKeyEvent&) = 0;
-    virtual void OnMouseButtonEvent(const InputMouseButtonEvent&) = 0;
-    virtual void OnMouseMoveEvent(const InputMouseMoveEvent&) = 0;
-    virtual void OnMouseScrollEvent(const InputMouseScrollEvent&) = 0;
-
-    // Keyboard:
-    virtual bool KeyDown(Key) const = 0;      // currently held
-    virtual bool KeyHit(Key) const = 0;       // pressed this frame
-    virtual bool KeyReleased(Key) const = 0;  // released this frame
-
-    // Mouse:
-    virtual bool    MouseButtonDown(MouseButton) const = 0;
-    virtual bool    MouseButtonHit(MouseButton) const = 0;
-    virtual bool    MouseButtonReleased(MouseButton) const = 0;
-    virtual int32_t MouseX() const = 0;
-    virtual int32_t MouseY() const = 0;
-    virtual int32_t MouseDeltaX() const = 0;
-    virtual int32_t MouseDeltaY() const = 0;
-    virtual float   MouseScrollDelta() const = 0;
-    virtual void    SetCursorMode(bool captured, bool hidden);
-};
-```
-
-### Example
-
-```cpp
-platform::IInput* input = loop.GetInput();
-
-if (input->KeyDown(platform::Key::Left))   { /* continuous movement */ }
-if (input->KeyHit(platform::Key::Space))   { /* one-shot action     */ }
-```
-
-> `BeginFrame()` is invoked by the platform/loop each frame; you normally only query.
+This overview focuses on the **direct engine path**, because that is the path you use when working with the engine itself.
 
 ---
 
-## 3. Backend Selection
+## 2. The Main Objects You Use
 
-KROM has no per-app DX11 adapter-enumeration API. Backends are registered as factories
-and selected by an enum at initialization time.
-
-```cpp
-// engine::renderer::DeviceFactory
-enum class BackendType { Null, DirectX11, DirectX12, OpenGL, Vulkan };
-```
-
-- `Null` — headless/no-op device (tests, CI).
-- `DirectX11`, `DirectX12`, `Vulkan` — modern HLSL path backends.
-- `OpenGL` — isolated 4.1 legacy path (macOS).
-
-You pass the chosen `BackendType` into `PlatformRenderLoop::Initialize`. Adapter/device
-details are described by `IDevice::DeviceDesc` (optional debug layer, app name, etc.).
-
----
-
-## 4. Runtime Loop — `renderer::PlatformRenderLoop`
-
-The outer runtime entry point. It owns the window, input, device, and `RenderSystem`,
-and runs one frame at a time.
-
-```cpp
-class PlatformRenderLoop
-{
-public:
-    bool Initialize(DeviceFactory::BackendType backend,
-                    platform::IPlatform& platform,
-                    const platform::WindowDesc& windowDesc,
-                    events::EventBus* eventBus = nullptr,
-                    const IDevice::DeviceDesc& deviceDesc = {});
-    void Shutdown();
-
-    bool Tick(const ecs::World& world,
-              const MaterialSystem& materials,
-              const RenderView& view,
-              platform::IPlatformTiming& timing,
-              const FramePipelineCallbacks& callbacks = {});
-
-    // Overload with offscreen render requests (render-to-texture):
-    bool Tick(const ecs::World& world,
-              const MaterialSystem& materials,
-              const RenderView& view,
-              platform::IPlatformTiming& timing,
-              const FramePipelineCallbacks& callbacks,
-              std::span<const OffscreenRenderRequest> offscreenRequests);
-
-    void SetPreRenderCallback(std::function<void(float dt)> cb); // animation/physics/AI
-
-    bool             ShouldExit() const noexcept;
-    platform::IWindow* GetWindow() const noexcept;
-    platform::IInput*  GetInput()  const noexcept;
-    RenderSystem&    GetRenderSystem() noexcept;
-};
-```
-
-### Functions
-
-- `Initialize(...)` — creates window + device + swapchain and brings the renderer up.
-  Register your render features **before** calling this (see §5).
-- `Tick(world, materials, view, timing)` — pumps events and renders one frame from the
-  current ECS state. Returns `false` when the window has been closed.
-- `SetPreRenderCallback(cb)` — runs once per frame after event pumping and before
-  rendering; this is where game-side systems (animation, physics, AI) advance.
-- `GetRenderSystem()` — access point for feature registration and stats.
-- `Shutdown()` — clean teardown (safe at end of run).
-
----
-
-## 5. Render Features / AddOns — `RenderSystem`
-
-KROM is AddOn-based: the renderer only extracts and draws what registered **features**
-describe. Register them on the loop's `RenderSystem` before `Initialize`.
-
-```cpp
-auto& rs = loop.GetRenderSystem();
-rs.RegisterFeature(addons::mesh_renderer::CreateMeshRendererFeature());
-rs.RegisterFeature(addons::lighting::CreateLightingFeature());
-rs.RegisterFeature(renderer::addons::forward::CreateForwardFeature());   // or Forward+
-```
-
-Verified feature factories and their namespaces:
-
-| Factory | Namespace | Purpose |
-| --- | --- | --- |
-| `CreateMeshRendererFeature()` | `engine::addons::mesh_renderer` | mesh extraction/draw |
-| `CreateLightingFeature()` | `engine::addons::lighting` | light extraction |
-| `CreateForwardFeature(config = {})` | `engine::renderer::addons::forward` | forward render pipeline (Forward+ via config) |
-| `CreateShadowFeature()` | `engine::addons::shadow` | shadow maps / CSM |
-| `CreateGtaoFeature(outResources = nullptr)` | `engine::renderer::addons::gtao` | GTAO ambient occlusion |
-| `CreateOutlineFeature(getSelected, shouldOutline)` | `engine::renderer::addons::outline` | screen-space selection outline (HLSL only) |
-
-Registration order matters only in that all features must be registered **before**
-`Initialize`. Additional shipped AddOns (camera-view building, debug draw, particles,
-animation, prefab, editor) follow the same `Create…Feature()` pattern. After a frame,
-read back stats via `loop.GetRenderSystem().GetStats()`.
-
-> Bloom and tonemapping are **not** separate user features — they are stages of the
-> standard forward frame, toggled per view through `RenderView::enableBloom` and driven
-> by the tonemap material (see §12). GTAO ambient occlusion is gated by
-> `RenderView::enableAmbientOcclusion`; shadows by `RenderView::enableShadows`.
-
----
-
-## 6. ECS Core
+When using the engine directly, you mainly interact with a small set of runtime objects.
 
 ### `ecs::ComponentMetaRegistry`
 
-Declares which component types exist and how they are reflected. The `World` is built
-**from** a populated registry — there is no default `World`.
+This describes which component types exist and how they are reflected.
 
-```cpp
-ecs::ComponentMetaRegistry registry;
-RegisterCoreComponents(registry);                          // engine
-addons::mesh_renderer::RegisterMeshRendererComponents(registry);
-addons::camera::RegisterCameraComponents(registry);        // engine
-addons::lighting::RegisterLightingComponents(registry);    // engine
-```
+You use it to:
+
+- register the core components (`RegisterCoreComponents`)
+- register per-AddOn components (mesh renderer, camera, lighting, ...)
+- hand the populated registry to the `ecs::World`
+
+The world is constructed **from** a registry — it has no default constructor.
+
+### `PlatformRenderLoop`
+
+This is the outer runtime entry point.
+
+You use it to:
+
+- initialize the runtime (platform, window, device, renderer)
+- register render features / AddOns through its `RenderSystem`
+- run one frame at a time (`Tick`)
+- shut the runtime down cleanly
+
+### `RenderSystem` (via `loop.GetRenderSystem()`)
+
+This is where rendering features / AddOns are registered.
+
+You use it to:
+
+- register features such as the mesh renderer, lighting, and a render pipeline
+  (Forward or Forward+)
+- read back per-frame statistics
 
 ### `ecs::World`
 
-```cpp
-class World
-{
-public:
-    explicit World(ComponentMetaRegistry& registry);   // no default ctor
+This is the core scene data container.
 
-    EntityID CreateEntity();
-    void     DestroyEntity(EntityID id);
-    bool     IsAlive(EntityID id) const noexcept;
-    size_t   EntityCount() const noexcept;
+You use it to:
 
-    template<typename T, typename... Args> T& Add(EntityID id, Args&&...);
-    template<typename T> void   Remove(EntityID id);
-    template<typename T> T*      Get(EntityID id) noexcept;
-    template<typename T> bool    Has(EntityID id) const noexcept;
+- create entities
+- add components
+- query scene data
+- store the actual world state
 
-    template<typename... Ts, typename Func> void View(Func&& func);   // iterate matches
-    template<typename Func> void ForEachAlive(Func&& func) const;
-};
-```
+### `Scene`
 
-> Note the names vs. other engines: the ECS container is `ecs::World` (not a
-> "Registry"), and iteration is `world.View<A, B>(fn)`.
+This is the higher-level scene helper built on top of the ECS world.
 
-### Example
+You use it to:
 
-```cpp
-ecs::World world(registry);
+- create named entities
+- build hierarchies
+- manage parent-child relationships
+- propagate transforms
 
-EntityID e = world.CreateEntity();
-world.Add<TransformComponent>(e);
-world.Add<WorldTransformComponent>(e);
-world.Add<NameComponent>(e, NameComponent{"Cube"});
+### `MaterialSystem`
 
-world.View<TransformComponent, MeshComponent>(
-    [](EntityID id, TransformComponent& t, MeshComponent& m) { /* ... */ });
-```
+This manages material-side data used by rendering.
 
-### Handle Types
+You use it to:
 
-Resources are referenced by typed, generation-checked handles (`MeshHandle`,
-`MaterialHandle`, `ShaderHandle`, `TextureHandle`, `BufferHandle`,
-`EnvironmentHandle`, …). Construct test/explicit handles with `Handle::Make(index, gen)`
-and check with `IsValid()`.
+- create or register material state
+- provide material data used by renderable entities
 
----
+### `RenderView`
 
-## 7. Core Components (`engine`, via `RegisterCoreComponents`)
+This is a plain value type describing the active view for one frame.
 
-### `TransformComponent`
+It carries view/projection matrices, camera position/forward, and per-view toggles
+(shadows, bloom, ambient occlusion, background mode, layer masks).
 
-```cpp
-struct TransformComponent
-{
-    Vec3 localPosition{0,0,0};
-    Quat localRotation = Quat::Identity();
-    Vec3 localScale{1,1,1};
-    bool inheritParentScale = true;
-    bool dirty = true;
-    uint32_t localVersion, worldVersion, parentWorldVersion;
+You either:
 
-    void SetEulerDeg(float pitch, float yaw, float roll) noexcept;
-    void RotateLocalEulerDeg(float pitch, float yaw, float roll) noexcept;
-    void RotateWorldEulerDeg(float pitch, float yaw, float roll) noexcept;
-};
-```
+- fill its matrices directly, or
+- let the camera AddOn build it from a camera entity.
 
-### `WorldTransformComponent`
-
-```cpp
-struct WorldTransformComponent
-{
-    Vec3 position{0,0,0};
-    Quat rotation = Quat::Identity();
-    Vec3 scale{1,1,1};
-    Mat4 matrix  = Mat4::Identity();
-    Mat4 inverse = Mat4::Identity();
-};
-```
-
-### `BoundsComponent`
-
-Local + world AABB and bounding sphere used by visibility/culling.
-
-```cpp
-struct BoundsComponent
-{
-    Vec3  centerLocal{0,0,0},  extentsLocal{1,1,1};
-    Vec3  centerWorld{0,0,0},  extentsWorld{1,1,1};
-    float boundingSphere = 1.f;
-    uint32_t lastTransformVersion = 0u;
-    bool  localDirty = true;
-};
-```
-
-Other core components: `ParentComponent`, `ChildrenComponent`, `NameComponent`,
-`GuidComponent`, `OBBComponent`, `ActiveComponent`, `TagComponent`.
+`RenderView` is **not** itself a camera entity — it is the per-frame snapshot the
+renderer consumes.
 
 ---
 
-## 8. Render Components (AddOns)
+## 3. Basic Usage Flow
 
-### `MeshComponent` (`engine`, mesh_renderer AddOn)
+The direct usage flow is:
 
-```cpp
-struct MeshComponent
-{
-    MeshHandle  mesh;
-    bool        visible        = true;
-    bool        castShadows    = true;
-    bool        receiveShadows = true;
-    uint32_t    layerMask      = renderer::LAYER_DEFAULT;
-    std::string meshAssetPath;   // "model.glb#mesh/<i>" or "mesh.kmesh"
-};
-```
+1. build a `ComponentMetaRegistry` and register the component metas
+2. create the platform and window description
+3. register render features / AddOns on the render system
+4. initialize `PlatformRenderLoop`
+5. create the `ecs::World` (passing the registry)
+6. create scene entities (camera + renderables)
+7. create or assign materials
+8. produce a `RenderView`
+9. call `Tick(...)` every frame
+10. shut the runtime down when finished
 
-### `MaterialComponent` (`engine`, mesh_renderer AddOn)
-
-Supports an entity-wide material plus per-submesh slot overrides.
-
-```cpp
-struct MaterialComponent
-{
-    struct SlotOverride { uint32_t submeshIndex; MaterialHandle material; std::string materialAssetPath; };
-
-    MaterialHandle material;            // entity-wide
-    uint32_t       submeshIndex = 0u;
-    std::string    materialAssetPath;
-    std::string    baseColorTexturePath;
-    std::vector<SlotOverride> slotOverrides;
-
-    const SlotOverride* FindSlotOverride(uint32_t index) const noexcept;
-};
-```
-
-### `CameraComponent` (`engine`, camera AddOn)
-
-```cpp
-struct CameraComponent
-{
-    ProjectionType projection   = ProjectionType::Perspective; // or Orthographic
-    float fovYDeg   = 60.f, nearPlane = 0.1f, farPlane = 1000.f;
-    float orthoSize = 10.f, aspectRatio = 16.f/9.f;
-    uint32_t cullingMask = /* all except editor-gizmo layers */;
-    bool isMainCamera = false;
-    BackgroundMode backgroundMode = BackgroundMode::ClearColor;
-    std::array<float,4> clearColor = {0,0,0,1};
-};
-```
-
-> Cameras do not render themselves. The camera AddOn builds a `RenderView` (§9) from a
-> camera entity; the `RenderView` is what `Tick` consumes.
-
-### `LightComponent` (`engine`, lighting AddOn)
-
-```cpp
-enum class LightType : uint8_t { Directional, Point, Spot };
-
-struct LightComponent
-{
-    LightType  type        = LightType::Point;
-    Vec3       color       {1,1,1};
-    float      intensity   = 1.f;
-    float      range       = 10.f;
-    float      spotInnerDeg = 15.f, spotOuterDeg = 30.f;
-    bool       castShadows = false;
-    uint32_t   layerMask   = 0xFFFFFFFFu;
-    ShadowSettings shadowSettings;
-};
-```
+That is the practical engine path.
 
 ---
 
-## 9. `renderer::RenderView`
+## 4. Typical Startup Path
 
-A plain per-frame value type describing the active view. Fill it directly, or let the
-camera AddOn produce it from a camera entity.
+A typical startup sequence looks like this:
 
-```cpp
-struct RenderView
-{
-    Mat4 view = Mat4::Identity();
-    Mat4 projection = Mat4::Identity();
-    Vec3 cameraPosition{0,0,0};
-    Vec3 cameraForward{0,0,1};
-    Vec3 ambientColor{0.03f,0.03f,0.03f};
-    float ambientIntensity = 1.f;
-    float nearPlane = 0.1f, farPlane = 1000.f;
-    uint32_t debugFlags = 0u;
-    uint32_t visibilityLayerMask = LAYER_ALL;
-    uint32_t lightLayerMask      = LAYER_ALL;
-    BackgroundMode backgroundMode = BackgroundMode::ClearColor;
-    bool enableBloom = true;
-    bool enableShadows = true;
-    bool enableAmbientOcclusion = true;
-    std::array<float,4> clearColor{0.3f,0.3f,0.3f,1.f};
-};
-```
+1. register components into a `ComponentMetaRegistry`
+2. register render features / AddOns
+3. define a window description
+4. initialize the runtime loop
+5. create `ecs::World` from the registry
+6. create `Scene`
+7. create `MaterialSystem`
+8. create camera and scene entities
+9. build a `RenderView`
+10. call `Tick(...)` every frame
+
+In short:
+
+- register components and features first
+- initialize runtime second
+- build scene third
+- run frames last
 
 ---
 
-## 10. Mesh Data (`engine::assets`)
+## 5. Minimal Initialization Example
 
-CPU-side geometry uses **flat float arrays** (not vectors of vec3).
-
-```cpp
-struct SubMeshData
-{
-    std::vector<float>    positions;  // 3 floats per vertex
-    std::vector<float>    normals;    // 3 floats
-    std::vector<float>    tangents;   // 4 floats (xyz + handedness)
-    std::vector<float>    uvs;        // 2 floats
-    std::vector<float>    colors;     // 4 floats (RGBA)
-    std::vector<uint32_t> indices;
-    std::vector<float>    boneWeights; // 4 floats
-    std::vector<uint32_t> boneIndices; // 4 uints
-    uint32_t              materialIndex = 0u;
-
-    std::vector<uint8_t>  rawInterleavedBytes; // optional .kmesh fast path
-    uint32_t              rawVertexStride = 0u;
-};
-
-struct MeshAsset : AssetBase
-{
-    std::vector<SubMeshData>    submeshes;
-    std::vector<MaterialHandle> materialHandles; // index == SubMeshData::materialIndex
-    GpuUploadStatus gpuStatus{};
-    void ComputeBounds(Vec3& outMin, Vec3& outMax) const;
-};
-```
-
-CPU assets (`MeshAsset`, texture assets) live in the `AssetRegistry`; GPU upload is
-handled separately by the backend runtime. Loading and importing go through the
-**asset pipeline**, not direct renderer calls — see §10.1.
-
-### 10.1 `assets::AssetPipeline`
-
-Connects the asset registry, filesystem, shader-compile path, and GPU upload. You give
-it a registry, a device (for upload), and optionally a filesystem; then set the asset
-root and register importers.
-
-```cpp
-class AssetPipeline
-{
-public:
-    AssetPipeline(AssetRegistry& registry,
-                  renderer::IDevice* device = nullptr,
-                  platform::IFilesystem* fs = nullptr);
-
-    void SetAssetRoot(const std::filesystem::path& root);
-
-    // Importers are format-agnostic; ImportBundle() picks by extension.
-    void RegisterMeshImporter(std::unique_ptr<IAssetImporter> importer);
-    ImportedAssetBundle ImportBundle(const std::string& path);   // .glb/.fbx/.obj/.usd...
-
-    MeshHandle     LoadMesh(const std::string& path);
-    TextureHandle  LoadTexture(const std::string& path);
-    ShaderHandle   LoadShader(const std::string& path,
-                              ShaderStage fallbackStage = ShaderStage::Vertex);
-    MaterialHandle LoadMaterial(const std::string& path);
-    bool           LoadScene(const std::string& path, Scene& scene);
-
-    void PollHotReload();             // re-import changed source files
-    void BuildPendingShaderCaches();  // compile queued shaders
-    void UploadPendingGpuAssets();    // push CPU assets to the GPU
-
-    TextureHandle GetGpuTexture(TextureHandle) const noexcept;
-    ShaderHandle  GetGpuShader(ShaderHandle) const noexcept;
-};
-```
-
-### Typical asset setup
-
-```cpp
-assets::AssetRegistry registry;
-assets::AssetPipeline pipeline(registry, loop.GetRenderSystem().GetDevice());
-pipeline.SetAssetRoot("assets/");
-pipeline.RegisterMeshImporter(std::make_unique<addons::gltf::GltfImporter>());
-
-MeshHandle    mesh = pipeline.LoadMesh("models/cube.glb");
-TextureHandle tex  = pipeline.LoadTexture("textures/albedo.png");
-
-pipeline.BuildPendingShaderCaches();
-pipeline.UploadPendingGpuAssets();   // before the first frame that uses them
-```
-
-> Hand the registry to the renderer with `loop.GetRenderSystem().SetAssetRegistry(&registry)`
-> so shader and environment resolution can see it. `glTF`/`.glb` import is provided by the
-> `engine::addons::gltf::GltfImporter` AddOn.
-
----
-
-## 11. Materials (`engine::renderer` + material AddOns)
-
-Materials live in a `MaterialSystem`. The ergonomic path is the material AddOns
-(Unlit / Lit / PBR); the low-level path is `MaterialRuntimeBridge::RegisterMaterial`.
-
-### Unlit
-
-```cpp
-MaterialSystem ms;
-unlit::UnlitMaterialCreateInfo info{};
-info.name = "UnlitTest";
-info.vertexShader   = vs;
-info.fragmentShader = fs;
-info.enableEmissiveMap = true;
-info.alphaTest = true;
-
-unlit::UnlitMaterial mat = unlit::UnlitMaterial::Create(ms, info);
-mat.SetBaseColorFactor({0.8f, 0.7f, 0.6f, 1.f});
-mat.SetAlbedo(albedoTexture);
-MaterialHandle handle = mat.Handle();
-```
-
-### Lit
-
-```cpp
-lit::LitMaterialCreateInfo info{};
-info.name = "LitTest";
-info.vertexShader = vs; info.fragmentShader = fs; info.shadowShader = shadowVs;
-info.specularStrength = 0.6f; info.roughnessFactor = 0.2f;
-lit::LitMaterial mat = lit::LitMaterial::Create(ms, info);
-```
-
-### PBR (master + cached instance permutations)
-
-```cpp
-pbr::PbrMasterMaterial::Config config{};
-config.vs = vs; config.fs = fs; config.shadow = shadowVs;
-config.vertexLayout = layout;
-
-pbr::PbrMasterMaterial master = pbr::PbrMasterMaterial::Create(ms, config);
-
-MaterialHandle inst = master.CreateInstance("Inst")
-    .BaseColor(albedoTex)
-    .Normal(normalTex)
-    .Emissive(emissiveTex)
-    .Roughness(0.15f)
-    .Metallic(0.9f)
-    .IBL(true)
-    .Build();
-```
-
-Material descriptors carry feature flags (`MaterialFeatureFlags::PbrMetalRough`,
-`BaseColorMap`, `NormalMap`, `EmissiveMap`, `IblMap`, `AlphaTest`, `Unlit`, …) and a
-render policy (cull mode, double-sided). `doubleSided = true` overrides the cull mode to
-`None`.
-
-### Low-level registration
-
-```cpp
-MaterialDesc desc; desc.name = "LoopMat";
-MaterialRuntimeDesc runtime;
-runtime.renderPass     = StandardRenderPasses::Opaque();
-runtime.vertexShader   = vs;
-runtime.fragmentShader = fs;
-MaterialHandle h = MaterialRuntimeBridge::RegisterMaterial(ms, std::move(desc), runtime);
-```
-
----
-
-## 12. Post-Processing, Offscreen Rendering, and Environment
-
-KROM has **no** generic "create post-process pass" API. Post effects are either stages
-of the standard forward frame (bloom, tonemap) or dedicated AddOns (GTAO, outline),
-toggled per view.
-
-### Bloom / Tonemap
-
-Built into the standard forward recipe.
-
-- `RenderView::enableBloom` turns bloom on/off for that view.
-- Tonemapping runs as the final fullscreen pass. Supply a passthrough tonemap material
-  once before the first frame:
-
-```cpp
-loop.GetRenderSystem().SetDefaultTonemapMaterial(tonemapMat, materials);
-```
-
-  (A fullscreen passthrough shader: no vertex buffer, no depth test. If you instead set
-  an `onTonemap` frame callback, that takes precedence.)
-
-### GTAO ambient occlusion
-
-```cpp
-std::shared_ptr<gtao::GtaoGpuResources> gtaoResources;
-rs.RegisterFeature(renderer::addons::gtao::CreateGtaoFeature(&gtaoResources));
-// gtaoResources lets you tweak GTAO settings at runtime
-```
-
-Gated per view by `RenderView::enableAmbientOcclusion`.
-
-### Outline (editor selection)
-
-```cpp
-rs.RegisterFeature(renderer::addons::outline::CreateOutlineFeature(
-    /* getSelected      */ [&]{ return selectedEntity; },
-    /* shouldOutline    */ [&](EntityID e){ return IsSelectable(e); }));
-```
-
-Renders nothing when no entity is selected. HLSL backends only (disabled on OpenGL).
-
-### Offscreen rendering (render-to-texture)
-
-Use the second `Tick` overload with one or more `OffscreenRenderRequest`s. Each request
-renders the world from its own `RenderView` into a render target you allocated from the
-device.
-
-```cpp
-struct OffscreenRenderRequest
-{
-    const RenderView*  view = nullptr;
-    RenderTargetHandle outputRT;
-    TextureHandle      outputTex;
-    uint32_t           viewportWidth = 0u;
-    uint32_t           viewportHeight = 0u;
-    const FramePipelineCallbacks* callbacks = nullptr;
-};
-
-// Allocate the target via the device (renderer::IDevice::CreateRenderTarget),
-// then pass a span of requests:
-OffscreenRenderRequest req{};
-req.view = &previewView;
-req.outputRT = previewRT;
-req.viewportWidth = 512u; req.viewportHeight = 512u;
-
-const OffscreenRenderRequest requests[] = { req };
-loop.Tick(world, materials, mainView, timing, callbacks, requests);
-```
-
-### Environment / IBL
-
-Image-based lighting is managed by the render system, not a per-frame view field.
-
-```cpp
-EnvironmentHandle env = rs.CreateEnvironment(envDesc);
-rs.SetActiveEnvironment(env);
-// ...
-rs.DestroyEnvironment(env);
-```
-
-Materials opt into IBL through their feature flags (e.g. PBR `.IBL(true)`, §11).
-
----
-
-## 13. Minimal Initialization Example
-
-This mirrors the engine's own end-to-end path (see `tests/test_renderer.cpp`).
+A minimal direct initialization flow looks like this:
 
 ```cpp
 using namespace engine;
 
-// 1. Components.
+// 1. Component metas: the renderer only sees what is registered here.
 ecs::ComponentMetaRegistry registry;
 RegisterCoreComponents(registry);
-addons::mesh_renderer::RegisterMeshRendererComponents(registry);
-addons::camera::RegisterCameraComponents(registry);
-addons::lighting::RegisterLightingComponents(registry);
+RegisterMeshRendererComponents(registry);
+RegisterCameraComponents(registry);
+RegisterLightingComponents(registry);
 
-// 2. Loop + render features (before Initialize).
+// 2. Runtime loop + render features / AddOns (must happen before Initialize).
 renderer::PlatformRenderLoop loop;
-auto& rs = loop.GetRenderSystem();
-rs.RegisterFeature(addons::mesh_renderer::CreateMeshRendererFeature());
-rs.RegisterFeature(addons::lighting::CreateLightingFeature());
-rs.RegisterFeature(renderer::addons::forward::CreateForwardFeature());
+loop.GetRenderSystem().RegisterFeature(addons::mesh_renderer::CreateMeshRendererFeature());
+loop.GetRenderSystem().RegisterFeature(addons::lighting::CreateLightingFeature());
+loop.GetRenderSystem().RegisterFeature(renderer::addons::forward::CreateForwardFeature());
 
-// 3. Window + device, then initialize.
-platform::WindowDesc desc{};
-desc.width = 1280u; desc.height = 720u; desc.title = "KROM";
+// 3. Platform + device, then initialize.
+platform::WindowDesc windowDesc{};
+windowDesc.width  = 1280u;
+windowDesc.height = 720u;
+windowDesc.title  = "KROM";
 
-renderer::IDevice::DeviceDesc deviceDesc{};
-deviceDesc.enableDebugLayer = true;
-loop.Initialize(renderer::DeviceFactory::BackendType::DirectX11, platform, desc, &bus, deviceDesc);
+if (!loop.Initialize(backendType, platform, windowDesc))   // eventBus / deviceDesc optional
+    return;
 
-// 4. World + material.
-ecs::World world(registry);
+// 4. World (built from the registry) + scene-side systems.
+ecs::World               world(registry);
+Scene                    scene(world);
 renderer::MaterialSystem materials;
-// ... register/create a material, obtain MaterialHandle `mat` ...
 
-// 5. A renderable entity.
-EntityID e = world.CreateEntity();
-world.Add<TransformComponent>(e);
-world.Add<WorldTransformComponent>(e);
-world.Add<MeshComponent>(e, MeshComponent{meshHandle});
-world.Add<MaterialComponent>(e, MaterialComponent{mat});
-world.Add<BoundsComponent>(e, BoundsComponent{
-    .centerWorld={0,0,0}, .extentsWorld={0.5f,0.5f,0.5f}, .boundingSphere=0.87f});
-
-// 6. View + frame loop.
+// 5. Per-frame view (filled by hand here; the camera AddOn can build it instead).
 renderer::RenderView view{};
-view.view           = Mat4::LookAtRH({0,0,-5}, {0,0,0}, Vec3::Up());
-view.projection     = Mat4::PerspectiveFovRH(60.f * math::DEG_TO_RAD, 16.f/9.f, 0.1f, 100.f);
-view.cameraPosition = {0,0,-5};
+view.view           = /* world-to-view matrix */;
+view.projection     = /* projection matrix */;
+view.cameraPosition = { 0.f, 0.f, -5.f };
+view.cameraForward  = { 0.f, 0.f,  1.f };
 
-platform::StdTiming timing;
+// Optional: game-side systems (animation, physics, AI) once per frame,
+// after event pumping and before rendering. dt is in seconds.
+loop.SetPreRenderCallback([&](float dt) { /* update ECS state */ });
+
 while (!loop.ShouldExit())
-    loop.Tick(world, materials, view, timing);
+{
+    if (!loop.Tick(world, materials, view, timing))
+        break;
+}
 
 loop.Shutdown();
 ```
 
+This is the basic pattern you will follow in most applications using the direct path.
+
+> The exact feature set you register depends on what you render. Forward+ is not a
+> separate factory; it is a mode of the forward feature:
+>
+> ```cpp
+> renderer::addons::forward::ForwardFeatureConfig cfg{};
+> cfg.mode = renderer::addons::forward::ForwardRendererMode::ForwardPlus;
+> loop.GetRenderSystem().RegisterFeature(renderer::addons::forward::CreateForwardFeature(cfg));
+> ```
+>
+> The same config also controls clear color, environment background and bloom
+> (`enableBloom`, `bloomThreshold`, ...). Add the shadow / post-processing AddOns as
+> required.
+
 ---
 
-## 14. Minimal ECS Render Path
+## 6. Creating Scene Content
 
-For a visible renderable entity you need (core + mesh_renderer components):
+Once the runtime is initialized, you create scene content through the ECS world and scene helpers.
 
-- `TransformComponent`
-- `WorldTransformComponent`
-- `MeshComponent` (with a valid `MeshHandle`)
-- `MaterialComponent` (with a valid `MaterialHandle`)
-- `BoundsComponent`
+Typical steps are:
 
-For the active view, either:
+1. create an entity
+2. add transform data (`TransformComponent` + `WorldTransformComponent`)
+3. add render-related components (mesh, material, bounds)
+4. assign mesh and material references (meshes/textures come from the asset pipeline)
+5. ensure the object is visible to the active view
 
-- fill a `RenderView` by hand (matrices + camera position/forward), **or**
-- create a camera entity (`TransformComponent`, `WorldTransformComponent`,
-  `CameraComponent` with `isMainCamera = true`) and let the camera AddOn build the
-  `RenderView`.
+In practice, the renderer works from scene state. You do not submit loose draw calls manually. You create entities and resources, and the renderer builds the frame from that data.
 
-And — required for anything to appear — the matching **component metas** and **render
-features** must be registered before `Initialize` (§5, §6).
+The corresponding component metas must have been registered up front (see Section 5),
+otherwise the components are invisible to extraction.
+
+---
+
+## 7. Creating a Camera
+
+To render anything visible, you need a valid `RenderView` for the frame.
+
+There are two ways to obtain it:
+
+- **By hand:** fill `view.view`, `view.projection`, `view.cameraPosition`, and
+  `view.cameraForward` yourself (as in Section 5).
+- **Via the camera AddOn:** create a camera entity (transform + camera components),
+  then let the camera view builder produce a `RenderView` from it each frame:
+
+  ```cpp
+  // Uses the primary camera entity in the world.
+  addons::camera::BuildPrimaryRenderView(world, width, height, view);
+
+  // Or a specific camera entity.
+  addons::camera::BuildRenderViewFromCamera(world, cameraEntity, width, height, view);
+  ```
+
+  Both return `false` if no usable camera was found.
+
+Either way, the `RenderView` is what `Tick(...)` consumes. If no valid view exists, the
+renderer has no meaningful point of view and the scene will not render as expected.
+
+---
+
+## 8. Creating a Visible Object
+
+A visible object is created through normal scene and resource setup.
+
+Typical requirements are:
+
+- a valid transform
+- renderable state (mesh + material components)
+- mesh reference
+- material reference
+- valid bounds for visibility processing
+
+This is important:
+
+A first visible object is **not** a special case in the API. It follows the same engine model as every other rendered object.
+
+That means the normal workflow is:
+
+1. create entity
+2. add required components (whose metas were registered)
+3. assign mesh/material data
+4. run the frame
+
+---
+
+## 9. What Happens Per Frame
+
+From the user side, one frame usually means one call to:
+
+```cpp
+loop.Tick(world, materials, view, timing);
+```
+
+That single call drives the full renderer frame for the current world state, using the
+features you registered before `Initialize`. It returns `false` when the frame could not
+be run; `loop.ShouldExit()` tells you when the window was closed.
+
+Game-side systems can either run before `Tick(...)` in your own loop, or be hooked in
+via `loop.SetPreRenderCallback(...)`, which runs once per frame after event pumping and
+before rendering.
+
+From a practical usage perspective, the frame loop normally looks like this:
+
+1. update your game or application state
+2. write changes into ECS components
+3. update camera/view state (matrices in the `RenderView`)
+4. call `Tick(...)`
+5. repeat
+
+So the normal user-facing model is:
+
+- update scene state
+- let the renderer consume it
+- render one frame
+
+---
+
+## 10. The Practical Mental Model
+
+The simplest correct way to think about the engine is this:
+
+- `ComponentMetaRegistry` declares which components exist
+- registered **features / AddOns** declare what the renderer can do
+- `ecs::World` stores the scene
+- `Scene` helps build and organize that scene
+- `MaterialSystem` provides material-side data
+- `RenderView` defines how the scene should be viewed this frame
+- `PlatformRenderLoop` renders the current frame
+
+That is the core usage model.
+
+You are not expected to build a frame manually. You register your components and
+features, build scene state, and then run the renderer.
+
+---
+
+## 11. Minimal Requirements for Something Visible
+
+To get a visible result on screen, you generally need **four** pieces:
+
+### Registered components and features
+
+The component metas and the render features / AddOns (mesh renderer, lighting, a render
+pipeline) must be registered before initialization. Without them, frames run but render
+nothing. Registering a feature after `Initialize` is rejected with an error.
+
+Note: `RenderView::enableBloom` defaults to `true`, but bloom only appears if the forward
+feature was also created with `ForwardFeatureConfig::enableBloom = true`.
+
+### A working runtime
+
+The platform loop and renderer must initialize successfully.
+
+### A valid view
+
+A `RenderView` with sensible view/projection matrices (filled by hand or built from a
+camera entity).
+
+### A renderable scene object
+
+At least one entity must contain the data required to be treated as visible render
+content (transform, mesh, material, bounds).
+
+If any of those pieces is missing, you will usually get an empty frame.
+
+---
+
+## 12. First Visible Scene: Practical Path
+
+A first visible scene usually follows this path:
+
+1. register component metas
+2. register render features / AddOns
+3. initialize the runtime
+4. create the ECS world from the registry
+5. create the scene helper
+6. create a camera (or build a `RenderView` by hand)
+7. create one renderable object
+8. assign its mesh and material
+9. run the frame loop
+
+That is the basic path from engine startup to first image.
+
+---
+
+## 13. Summary
+
+The practical usage path is:
+
+1. register components (`ComponentMetaRegistry`)
+2. register render features / AddOns (`loop.GetRenderSystem().RegisterFeature(...)`)
+3. initialize `PlatformRenderLoop`
+4. create `ecs::World` (from the registry)
+5. create `Scene`
+6. create `MaterialSystem`
+7. build a `RenderView`
+8. call `Tick(...)` every frame
+9. shut down cleanly when done
+
+The important point is simple:
+
+**You use KROM by registering your components and features, building scene state, and running the frame loop.**
+
+You do not work in an immediate-mode rendering style.
+You create and update world data, and the engine renders that world for you.
