@@ -46,12 +46,12 @@ PlatformRenderLoop
           -> FrameGraphStage
           -> FrameExecutionStage
       -> FeatureRegistry
+      -> RenderPassRegistry
       -> ShaderRuntime
       -> GpuResourceRuntime
       -> EnvironmentSystem
       -> JobSystem
-      -> ecs::World / Scene
-          -> RenderSceneSnapshot
+      -> RenderSceneSnapshot
           -> ECSExtractor
           -> RenderSceneStorage (RenderWorld = legacy facade)
       -> Backend Interfaces
@@ -59,6 +59,8 @@ PlatformRenderLoop
           -> ISwapchain
           -> ICommandList
           -> IFence
+
+ecs::World / Scene   (owned by the application, passed into Tick / RenderFrame)
 ```
 
 ---
@@ -113,6 +115,9 @@ public:
               const RenderView& view,
               platform::IPlatformTiming& timing,
               const FramePipelineCallbacks& callbacks = {});
+    // + overload taking std::span<const OffscreenRenderRequest>
+
+    void SetPreRenderCallback(std::function<void(float dt)> cb);
 };
 ```
 
@@ -122,6 +127,7 @@ This class owns the outer application flow:
 - window creation
 - event pumping
 - resize handling
+- the pre-render callback (game-side systems: animation, physics, AI)
 - per-frame renderer execution
 
 It is intentionally kept focused. Platform and lifecycle concerns stay outside the
@@ -153,8 +159,9 @@ public:
                      const RenderView& view,
                      const platform::IPlatformTiming& timing,
                      const FramePipelineCallbacks& callbacks = {});
+    // + overload taking std::span<const OffscreenRenderRequest>
 
-    bool RegisterFeature(std::unique_ptr<IEngineFeature> feature);
+    bool RegisterFeature(std::unique_ptr<IEngineFeature> feature); // before Initialize only
     const RenderStats& GetStats() const noexcept;
 };
 ```
@@ -171,7 +178,13 @@ Important owned systems include:
 - `EnvironmentSystem` (IBL)
 - `JobSystem`
 - `RenderPassRegistry`
-- backend objects such as `IDevice`, `ISwapchain`, `ICommandList` and `IFence`
+- `RenderFrameOrchestrator`
+- the last `RenderSceneSnapshot`
+- backend objects such as `IDevice`, `ISwapchain`, graphics/compute/transfer
+  `ICommandList`s and the frame `IFence`
+
+The ECS world and the `MaterialSystem` are **not** owned by `RenderSystem`; the
+application owns them and passes them in per frame.
 
 That is a healthy split. `RenderSystem` owns renderer lifetime and major services, while
 frame assembly itself is handled by dedicated stage logic inside the orchestrator.
@@ -433,6 +446,7 @@ struct DrawItem
     uint32_t     submeshIndex    = 0u;
 
     uint32_t cbOffset = 0u, cbSize = 0u;
+    uint32_t instanceDrawOffset = 0u;
     uint32_t instanceCount = 1u, firstInstance = 0u;
 
     bool hasGpuData() const noexcept;
@@ -452,6 +466,8 @@ struct RenderQueue
     std::vector<DrawList>                    lists;
     std::unordered_map<RenderPassID, size_t> indices;
     std::vector<PerObjectConstants>          objectConstants;
+    std::vector<PerObjectConstants>          instanceObjectConstants; // instanced draws
+    std::vector<EntityID>                    instanceEntities;
     uint32_t                                 activeShadowResolution = 0u;
 
     DrawList& GetOrCreateList(RenderPassID passId) noexcept;
@@ -496,14 +512,27 @@ rather than with one large mixed render path.
 ## Feature-Oriented Rendering
 
 KROM uses a `FeatureRegistry` to extend renderer behavior through features instead of
-hardwiring everything into one fixed path. Features implement `IEngineFeature`; they
-register components, pass contributors, and frame data, and are initialized/shut down
-with the renderer.
+hardwiring everything into one fixed path. Features implement `IEngineFeature`
+(an alias of `IRenderFeature`: `GetName`, `GetID`, `GetDependencies`, `Register`,
+`Initialize`, `Shutdown`) and are initialized/shut down with the renderer.
 
-The `addons/forward` module demonstrates this with `ForwardFeature` (the forward / Forward+
-render pipeline). Lighting, shadows, GTAO, outline, mesh rendering, camera-view building,
-debug draw, particles and animation are all shipped as features that plug into the same
-registry.
+In `Register(FeatureRegistrationContext&)` a feature contributes renderer hooks:
+
+- scene extraction steps (`RegisterSceneExtractionStep`) — write proxies and
+  per-feature frame data
+- frame constants contributors (`RegisterFrameConstantsContributor`)
+- render pipelines (`RegisterRenderPipeline`, optionally as default)
+- pass contributors (`RegisterPassContributor`)
+
+Features do **not** register ECS components; component metas are registered separately
+in the `ecs::ComponentMetaRegistry` the world is built from.
+
+The `addons/forward` module demonstrates this with `ForwardFeature`, which registers the
+forward / Forward+ render pipeline. The shipped render features are mesh renderer,
+lighting, forward, shadow, GTAO, outline and editor. Other AddOns — camera-view building,
+debug draw, particles, animation, prefab, physics, audio, scripting, text — are not
+render features; they provide components, systems, services or helper functions around
+the core path.
 
 That gives the renderer room to grow while keeping the core architecture stable:
 
@@ -597,8 +626,9 @@ Key parts include:
 - `ResourceAliaser` — transient-resource lifetime/aliasing analysis
 
 The pipeline that *populates* the graph is feature-driven: the active render pipeline
-(e.g. `StandardFramePipeline` from the forward AddOn) builds the graph from a frame
-recipe and the registered pass contributors.
+(registered by the forward AddOn; its recipe is built by `StandardFrameRecipeBuilder` in
+`addons/forward/StandardFramePipeline.hpp`) builds the graph from a frame recipe and the
+registered pass contributors.
 
 This means the engine does not stop at queue building. It also compiles prepared work
 into a validated execution structure that reasons about:
@@ -623,7 +653,8 @@ The engine uses two distinct CPU work systems.
 
 ### TaskGraph
 
-`jobs::TaskGraph` provides explicit task dependency management for staged work.
+`jobs::TaskGraph` provides explicit task dependency management for staged work
+(used via `jobs::FrameScheduler`, e.g. by `Scene`).
 
 That is the right split. A renderer benefits from separating:
 
