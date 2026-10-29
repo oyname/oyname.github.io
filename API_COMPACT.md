@@ -11,8 +11,14 @@ For exact types, methods, fields, and function behavior, see the API Reference.
 > **Note on namespaces.** The code samples below assume `using namespace engine;` for
 > readability. Fully qualified, the main objects live in `engine::renderer`
 > (`PlatformRenderLoop`, `MaterialSystem`, `RenderView`), `engine::ecs` (`World`,
-> `ComponentMetaRegistry`), and `engine` (`Scene`). AddOn factories live under
-> `engine::addons::*` and `engine::renderer::addons::*`.
+> `ComponentMetaRegistry`), and `engine` (`Scene`).
+>
+> Component registration functions (`RegisterCoreComponents`,
+> `RegisterMeshRendererComponents`, `RegisterCameraComponents`,
+> `RegisterLightingComponents`) live directly in `engine`.
+> Feature factories and AddOn helpers live under `engine::addons::*`
+> (mesh renderer, lighting, camera view builder) and `engine::renderer::addons::*`
+> (forward pipeline).
 
 ---
 
@@ -212,11 +218,11 @@ using namespace engine;
 // 1. Component metas: the renderer only sees what is registered here.
 ecs::ComponentMetaRegistry registry;
 RegisterCoreComponents(registry);
-addons::mesh_renderer::RegisterMeshRendererComponents(registry);
-addons::camera::RegisterCameraComponents(registry);
-addons::lighting::RegisterLightingComponents(registry);
+RegisterMeshRendererComponents(registry);
+RegisterCameraComponents(registry);
+RegisterLightingComponents(registry);
 
-// 2. Runtime loop + render features / AddOns.
+// 2. Runtime loop + render features / AddOns (must happen before Initialize).
 renderer::PlatformRenderLoop loop;
 loop.GetRenderSystem().RegisterFeature(addons::mesh_renderer::CreateMeshRendererFeature());
 loop.GetRenderSystem().RegisterFeature(addons::lighting::CreateLightingFeature());
@@ -228,12 +234,13 @@ windowDesc.width  = 1280u;
 windowDesc.height = 720u;
 windowDesc.title  = "KROM";
 
-loop.Initialize(backendType, platform, windowDesc);   // eventBus / deviceDesc optional
+if (!loop.Initialize(backendType, platform, windowDesc))   // eventBus / deviceDesc optional
+    return;
 
 // 4. World (built from the registry) + scene-side systems.
-ecs::World     world(registry);
-Scene          scene(world);
-MaterialSystem materials;
+ecs::World               world(registry);
+Scene                    scene(world);
+renderer::MaterialSystem materials;
 
 // 5. Per-frame view (filled by hand here; the camera AddOn can build it instead).
 renderer::RenderView view{};
@@ -242,10 +249,14 @@ view.projection     = /* projection matrix */;
 view.cameraPosition = { 0.f, 0.f, -5.f };
 view.cameraForward  = { 0.f, 0.f,  1.f };
 
-while (running)
+// Optional: game-side systems (animation, physics, AI) once per frame,
+// after event pumping and before rendering. dt is in seconds.
+loop.SetPreRenderCallback([&](float dt) { /* update ECS state */ });
+
+while (!loop.ShouldExit())
 {
-    // update ECS / camera state here
-    loop.Tick(world, materials, view, timing);
+    if (!loop.Tick(world, materials, view, timing))
+        break;
 }
 
 loop.Shutdown();
@@ -253,9 +264,18 @@ loop.Shutdown();
 
 This is the basic pattern you will follow in most applications using the direct path.
 
-> The exact feature set you register depends on what you render: swap
-> `CreateForwardFeature()` for the Forward+ pipeline when you need many dynamic lights,
-> and add the shadow / post-processing AddOns as required.
+> The exact feature set you register depends on what you render. Forward+ is not a
+> separate factory; it is a mode of the forward feature:
+>
+> ```cpp
+> renderer::addons::forward::ForwardFeatureConfig cfg{};
+> cfg.mode = renderer::addons::forward::ForwardRendererMode::ForwardPlus;
+> loop.GetRenderSystem().RegisterFeature(renderer::addons::forward::CreateForwardFeature(cfg));
+> ```
+>
+> The same config also controls clear color, environment background and bloom
+> (`enableBloom`, `bloomThreshold`, ...). Add the shadow / post-processing AddOns as
+> required.
 
 ---
 
@@ -287,7 +307,17 @@ There are two ways to obtain it:
 - **By hand:** fill `view.view`, `view.projection`, `view.cameraPosition`, and
   `view.cameraForward` yourself (as in Section 5).
 - **Via the camera AddOn:** create a camera entity (transform + camera components),
-  then let the camera view builder produce a `RenderView` from it each frame.
+  then let the camera view builder produce a `RenderView` from it each frame:
+
+  ```cpp
+  // Uses the primary camera entity in the world.
+  addons::camera::BuildPrimaryRenderView(world, width, height, view);
+
+  // Or a specific camera entity.
+  addons::camera::BuildRenderViewFromCamera(world, cameraEntity, width, height, view);
+  ```
+
+  Both return `false` if no usable camera was found.
 
 Either way, the `RenderView` is what `Tick(...)` consumes. If no valid view exists, the
 renderer has no meaningful point of view and the scene will not render as expected.
@@ -328,7 +358,12 @@ loop.Tick(world, materials, view, timing);
 ```
 
 That single call drives the full renderer frame for the current world state, using the
-features you registered before `Initialize`.
+features you registered before `Initialize`. It returns `false` when the frame could not
+be run; `loop.ShouldExit()` tells you when the window was closed.
+
+Game-side systems can either run before `Tick(...)` in your own loop, or be hooked in
+via `loop.SetPreRenderCallback(...)`, which runs once per frame after event pumping and
+before rendering.
 
 From a practical usage perspective, the frame loop normally looks like this:
 
@@ -373,7 +408,10 @@ To get a visible result on screen, you generally need **four** pieces:
 
 The component metas and the render features / AddOns (mesh renderer, lighting, a render
 pipeline) must be registered before initialization. Without them, frames run but render
-nothing.
+nothing. Registering a feature after `Initialize` is rejected with an error.
+
+Note: `RenderView::enableBloom` defaults to `true`, but bloom only appears if the forward
+feature was also created with `ForwardFeatureConfig::enableBloom = true`.
 
 ### A working runtime
 
@@ -431,4 +469,3 @@ The important point is simple:
 
 You do not work in an immediate-mode rendering style.
 You create and update world data, and the engine renders that world for you.
-```
