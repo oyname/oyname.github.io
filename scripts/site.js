@@ -1,4 +1,4 @@
-onsole.log('site.js geladen');
+console.log('site.js geladen');
 
 function initSlider() {
     const slides = document.querySelectorAll('.slide');
